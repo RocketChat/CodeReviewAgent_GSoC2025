@@ -24,11 +24,15 @@ import type { IUser } from "@rocket.chat/apps-engine/definition/users";
 import { CodeReviewAgentCommand } from "./src/commands/CodeReviewAgentCommand";
 import { CodeReviewAgentWebhook } from "./src/endpoints/incoming";
 import { isUserHighHierarchy, sendDirectMessage } from "./src/helpers/message";
+import { StartupType } from "@rocket.chat/apps-engine/definition/scheduler";
+import { settings } from "./src/config/settings";
+import { PRService } from "./src/services/PRFetcher";
 
 export class CodeReviewAgentApp extends App {
 	public botUser: IUser;
 	public readonly botUsername: string = "code-review-agent-app.bot";
 	private readonly oauth2ClientInstance: IOAuth2Client;
+    private prService: PRService;
 
 	private oauth2Config: IOAuth2ClientOptions = {
 		alias: "code-review-agent-app",
@@ -44,6 +48,13 @@ export class CodeReviewAgentApp extends App {
 		super(info, logger, accessors);
 		this.oauth2ClientInstance = createOAuth2Client(this, this.oauth2Config);
 	}
+
+    public getPRService(): PRService {
+        if (!this.prService) {
+        this.prService = new PRService(this);
+        }
+        return this.prService;
+    }
 
 	private async authorizationCallback(
 		token: IAuthData,
@@ -104,6 +115,34 @@ export class CodeReviewAgentApp extends App {
 				security: ApiSecurity.UNSECURE,
 				endpoints: [new CodeReviewAgentWebhook(this)],
 			}),
+			configuration.scheduler.registerProcessors([
+                {
+                    id: 'prfetcher',
+                    startupSetting: {
+                        type: StartupType.RECURRING,
+                        interval: '24 hours',
+                      },
+                    processor: async (jobContext, read, modify, http, persistence) => {
+                        let user = jobContext.user as IUser;
+                        try {
+                            await this.prService.fetcher(user);
+                        } catch (e) {
+                            await sendDirectMessage({
+                                read,
+								modify,
+								user,
+								message: e.message,
+								persistence,
+							});
+                        }
+                    },
+                }
+            ]),
 		]);
+		await Promise.all(
+            settings.map((setting) =>
+                configuration.settings.provideSetting(setting)
+            )
+        );
 	}
 }
