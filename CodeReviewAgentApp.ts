@@ -120,21 +120,10 @@ export class CodeReviewAgentApp extends App {
                     id: 'prfetcher',
                     startupSetting: {
                         type: StartupType.RECURRING,
-                        interval: '24 hours',
-                      },
+                        interval: '1 minute',
+                    },
                     processor: async (jobContext, read, modify, http, persistence) => {
-                        let user = jobContext.user as IUser;
-                        try {
-                            await this.prService.fetcher(user);
-                        } catch (e) {
-                            await sendDirectMessage({
-                                read,
-								modify,
-								user,
-								message: e.message,
-								persistence,
-							});
-                        }
+                            await this.getPRService().fetcher();
                     },
                 }
             ]),

@@ -6,8 +6,11 @@ export enum AppSettingsEnum {
     OWNER_NAME_DEFAULT = 'RocketChat',
     REPOSITORIES_LIST_ID = 'repositories_list_id',
     REPOSITORIES_LIST_LABEL = 'Repositories List',
-    REPOSITORIES_LIST_DEFAULT = 'CodeReviewAgent_GSoC2025'
+    REPOSITORIES_LIST_DEFAULT = 'CodeReviewAgent_GSoC2025',
+    ORG_ADMIN_PAT_TOKEN_ID = 'org_admin_pat_token_id',
+    ORG_ADMIN_PAT_TOKEN_LABEL = 'Org Admin Personal Access Token'
 }
+9997299488
 
 export const settings: ISetting[] = [
     {
@@ -26,5 +29,13 @@ export const settings: ISetting[] = [
         public: false,
         packageValue: AppSettingsEnum.REPOSITORIES_LIST_DEFAULT,
         multiline: true
-    }
+    },
+    {
+        id: AppSettingsEnum.ORG_ADMIN_PAT_TOKEN_ID,
+        i18nLabel: AppSettingsEnum.ORG_ADMIN_PAT_TOKEN_LABEL,
+        type: SettingType.PASSWORD,
+        packageValue: '',
+        required: true,
+        public: false,
+    },
 ];
