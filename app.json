@@ -1,15 +1,16 @@
 {
-	"id": "f28a4e58-2e56-4859-ba24-8bf57165ab00",
-	"version": "0.0.1",
-	"requiredApiVersion": "1.50.0",
-	"iconFile": "icon.png",
-	"author": {
-		"name": "Jannat Khan",
-		"homepage": "https://github.com/jannatkhandev",
-		"support": "https://github.com/jannatkhandev"
-	},
-	"name": "Code Review Agent",
-	"nameSlug": "code-review-agent",
-	"classFile": "CodeReviewAgentApp.ts",
-	"description": "The Code Review Assistant app for Rocket.Chat addresses the common challenge of delayed code reviews, where pull requests often remain unattended for extended periods. This app intelligently analyzes the files modified in a pull request, examines the commit history of those files, leverages the CODEOWNERS file, and reviews past activity to identify the most relevant reviewers and does preliminary LLM review. By notifying only the most appropriate contributors, the app streamlines the review process. Integrated directly within Rocket.Chat, it provides user-friendly reminders and updates, LLM does the sanity review, enabling developers to stay informed and collaborate more effectively on code reviews."
+    "id": "f28a4e58-2e56-4859-ba24-8bf57165ab00",
+    "version": "0.0.1",
+    "requiredApiVersion": "^1.44.0",
+    "iconFile": "icon.png",
+    "author": {
+        "name": "Jannat Khan",
+        "homepage": "https://github.com/jannatkhandev",
+        "support": "https://github.com/jannatkhandev"
+    },
+    "name": "Code Review Agent",
+    "nameSlug": "code-review-agent",
+    "classFile": "CodeReviewAgentApp.ts",
+    "description": "The Code Review Assistant app for Rocket.Chat addresses the common challenge of delayed code reviews, where pull requests often remain unattended for extended periods. This app intelligently analyzes the files modified in a pull request, examines the commit history of those files, leverages the CODEOWNERS file, and reviews past activity to identify the most relevant reviewers and does preliminary LLM review. By notifying only the most appropriate contributors, the app streamlines the review process. Integrated directly within Rocket.Chat, it provides user-friendly reminders and updates, LLM does the sanity review, enabling developers to stay informed and collaborate more effectively on code reviews.",
+    "implements": []
 }
