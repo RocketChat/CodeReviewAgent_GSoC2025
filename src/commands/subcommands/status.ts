@@ -1,24 +1,30 @@
-import { IModify, IRead, IPersistence } from "@rocket.chat/apps-engine/definition/accessors";
+import {
+  IModify,
+  IRead,
+  IPersistence,
+} from "@rocket.chat/apps-engine/definition/accessors";
 import { IUser } from "@rocket.chat/apps-engine/definition/users";
 import { IRoom } from "@rocket.chat/apps-engine/definition/rooms";
-import { CodeReviewAgentApp } from "../../../CodeReviewAgentApp";
+import { IAppInterface } from "../../interfaces/IAppInterface";
 import { sendNotification } from "../../helpers/message";
 
 export async function handleStatusCommand(
-	app: CodeReviewAgentApp,
-	read: IRead,
-	modify: IModify,
-	user: IUser,
-	room: IRoom,
-	persistence: IPersistence
+  app: IAppInterface,
+  read: IRead,
+  modify: IModify,
+  user: IUser,
+  room: IRoom,
+  persistence: IPersistence
 ): Promise<void> {
-	try {
-		const spamService = app.getSpamDetectionService();
-		const persistenceRead = read.getPersistenceReader()
-		// Get recent stats
-		const pendingSpamReviews = await spamService.getPendingSpamReviews(persistenceRead);
-		
-		const message = `📊 **Code Review Agent Status**
+  try {
+    const spamService = app.getSpamDetectionService();
+    const persistenceRead = read.getPersistenceReader();
+    // Get recent stats
+    const pendingSpamReviews = await spamService.getPendingSpamReviews(
+      persistenceRead
+    );
+
+    const message = `📊 **Code Review Agent Status**
 
 		• 🔍 Spam reviews needed: ${pendingSpamReviews.length}
 
@@ -29,20 +35,19 @@ export async function handleStatusCommand(
 
 		*Last updated: ${new Date().toLocaleString()}*`;
 
-		await sendNotification({
-			modify: modify,
-			user: user,
-			room: room,
-			message: message
-		});
-		
-	} catch (error) {
-		app.getLogger().error(`Status command failed: ${error.message}`);
-		await sendNotification({
-			modify: modify,
-			user: user,
-			room: room,
-			message: `❌ **Unable to retrieve status:** ${error.message}`
-		});
-	}
+    await sendNotification({
+      modify: modify,
+      user: user,
+      room: room,
+      message: message,
+    });
+  } catch (error) {
+    app.getLogger().error(`Status command failed: ${error.message}`);
+    await sendNotification({
+      modify: modify,
+      user: user,
+      room: room,
+      message: `❌ **Unable to retrieve status:** ${error.message}`,
+    });
+  }
 }

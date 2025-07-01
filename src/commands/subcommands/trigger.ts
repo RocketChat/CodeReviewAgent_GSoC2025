@@ -1,54 +1,64 @@
-import { IModify, IRead, IPersistence, IHttp } from "@rocket.chat/apps-engine/definition/accessors";
+import {
+  IModify,
+  IRead,
+  IPersistence,
+  IHttp,
+} from "@rocket.chat/apps-engine/definition/accessors";
 import { IUser } from "@rocket.chat/apps-engine/definition/users";
 import { IRoom } from "@rocket.chat/apps-engine/definition/rooms";
-import { CodeReviewAgentApp } from "../../../CodeReviewAgentApp";
+import { IAppInterface } from "../../interfaces/IAppInterface";
 import { sendNotification } from "../../helpers/message";
 
 export async function handleTriggerCommand(
-	app: CodeReviewAgentApp,
-	read: IRead,
-	modify: IModify,
-	user: IUser,
-	room: IRoom,
-	http: IHttp,
-	persistence: IPersistence
+  app: IAppInterface,
+  read: IRead,
+  modify: IModify,
+  user: IUser,
+  room: IRoom,
+  http: IHttp,
+  persistence: IPersistence
 ): Promise<void> {
-	// Check admin permissions
-	if (!user.roles || !user.roles.some(role => role === 'admin' || role === 'owner')) {
-		await sendNotification({
-			modify: modify,
-			user: user,
-			room: room,
-			message: "❌ **Access Denied**\n\nOnly administrators can trigger the pipeline manually."
-		});
-		return;
-	}
+  // Check admin permissions
+  if (
+    !user.roles ||
+    !user.roles.some((role) => role === "admin" || role === "owner")
+  ) {
+    await sendNotification({
+      modify: modify,
+      user: user,
+      room: room,
+      message:
+        "❌ **Access Denied**\n\nOnly administrators can trigger the pipeline manually.",
+    });
+    return;
+  }
 
-	try {
-		await sendNotification({
-			modify: modify,
-			user: user,
-			room: room,
-			message: "🚀 **Triggering PR Processing Pipeline...**\n\nThis may take a few minutes depending on the number of new PRs."
-		});
+  try {
+    await sendNotification({
+      modify: modify,
+      user: user,
+      room: room,
+      message:
+        "🚀 **Triggering PR Processing Pipeline...**\n\nThis may take a few minutes depending on the number of new PRs.",
+    });
 
-		// Trigger the pipeline directly
-		await app.runPRProcessingPipeline(read, modify, http, persistence);
+    // Trigger the pipeline directly
+    await app.runPRProcessingPipeline(read, modify, http, persistence);
 
-		await sendNotification({
-			modify: modify,
-			user: user,
-			room: room,
-			message: "✅ **Pipeline completed successfully!**\n\nCheck logs for detailed results."
-		});
-
-	} catch (error) {
-		app.getLogger().error(`Manual pipeline trigger failed: ${error.message}`);
-		await sendNotification({
-			modify: modify,
-			user: user,
-			room: room,
-			message: `❌ **Pipeline failed:** ${error.message}`
-		});
-	}
+    await sendNotification({
+      modify: modify,
+      user: user,
+      room: room,
+      message:
+        "✅ **Pipeline completed successfully!**\n\nCheck logs for detailed results.",
+    });
+  } catch (error) {
+    app.getLogger().error(`Manual pipeline trigger failed: ${error.message}`);
+    await sendNotification({
+      modify: modify,
+      user: user,
+      room: room,
+      message: `❌ **Pipeline failed:** ${error.message}`,
+    });
+  }
 }
