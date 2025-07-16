@@ -1,5 +1,5 @@
 import { CodeReviewAgentApp } from '../../CodeReviewAgentApp';
-import { GeminiService } from './GeminiService';
+import { AIService } from './AIService';
 import { GitHubAPIService, GitHubPullRequest } from './GitHubAPIService';
 import { PRPersistence, StoredPR } from '../persistence/PRPersistence';
 import { SpamReviewPersistence, SpamReviewItem } from '../persistence/SpamReviewPersistence';
@@ -24,11 +24,11 @@ export interface PRAnalysisData {
 }
 
 export class SpamDetectionService {
-    private geminiService: GeminiService;
+    private aiService: AIService;
     private githubService: GitHubAPIService;
 
     constructor(private app: CodeReviewAgentApp) {
-        this.geminiService = app.getGeminiService();
+        this.aiService = app.getAIService();
         this.githubService = app.getGitHubService();
     }
 
@@ -42,8 +42,8 @@ export class SpamDetectionService {
             // Gather comprehensive PR data
             const analysisData = await this.gatherPRAnalysisData(pr, repoName);
             
-            // Perform Gemini-based spam analysis
-            const spamResult = await this.performGeminiSpamAnalysis(analysisData);
+                    // Perform AI-based spam analysis
+        const spamResult = await this.performAISpamAnalysis(analysisData);
             
             // If spam detected, queue for admin review
             if (spamResult.isSpam) {
@@ -101,9 +101,9 @@ export class SpamDetectionService {
     }
 
     /**
-     * Use Gemini to analyze PR for spam characteristics
+     * Use AI to analyze PR for spam characteristics
      */
-    private async performGeminiSpamAnalysis(data: PRAnalysisData): Promise<SpamAnalysisResult> {
+    private async performAISpamAnalysis(data: PRAnalysisData): Promise<SpamAnalysisResult> {
         const systemInstruction = `You are an expert at detecting spam pull requests in open source repositories. 
 
 Analyze the provided PR data and identify potential spam characteristics including:
@@ -149,9 +149,9 @@ ${data.diffSummary}
 
 Provide detailed analysis focusing on red flags that indicate this might be spam.`;
 
-        const result = await this.geminiService.makeGeminiRequest(prompt, systemInstruction, {
+        const result = await this.aiService.makeAIRequest(prompt, systemInstruction, {
             temperature: 0.2, // Low temperature for consistent analysis
-            maxOutputTokens: 1024
+            maxTokens: 1024
         });
 
         if (result.success) {
@@ -181,14 +181,14 @@ Provide detailed analysis focusing on red flags that indicate this might be spam
                         isSpam
                     };
                 } else {
-                    throw new Error('No JSON found in Gemini response');
+                    throw new Error('No JSON found in AI response');
                 }
             } catch (parseError) {
-                this.app.getLogger().warn(`Failed to parse Gemini spam analysis: ${parseError.message}`);
+                this.app.getLogger().warn(`Failed to parse AI spam analysis: ${parseError.message}`);
                 throw new Error(`Analysis parsing failed: ${parseError.message}`);
             }
         } else {
-            throw new Error(`Gemini analysis failed: ${result.error}`);
+            throw new Error(`AI analysis failed: ${result.error}`);
         }
     }
 

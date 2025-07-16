@@ -1,5 +1,5 @@
 import { CodeReviewAgentApp } from '../../CodeReviewAgentApp';
-import { GeminiService } from './GeminiService';
+import { AIService } from './AIService';
 import { GitHubAPIService, GitHubPullRequest, GitHubCommit } from './GitHubAPIService';
 import { CodeownersService } from './CodeownersService';
 import { UserMappingPersistence, UserMapping } from '../persistence/UserMappingPersistence';
@@ -27,12 +27,12 @@ export interface ReviewerAnalysisData {
 }
 
 export class ReviewerMatchingService {
-    private geminiService: GeminiService;
+    private aiService: AIService;
     private githubService: GitHubAPIService;
     private codeownersService: CodeownersService;
 
     constructor(private app: CodeReviewAgentApp) {
-        this.geminiService = app.getGeminiService();
+        this.aiService = app.getAIService();
         this.githubService = app.getGitHubService();
         this.codeownersService = app.getCodeownersService();
     }
@@ -47,11 +47,11 @@ export class ReviewerMatchingService {
             // Gather analysis data
             const analysisData = await this.gatherReviewerAnalysisData(persistenceRead, pr, repoName);
             
-            // Use Gemini to analyze and rank reviewers
-            const geminiRecommendations = await this.performGeminiReviewerAnalysis(analysisData);
+            // Use AI to analyze and rank reviewers
+            const aiRecommendations = await this.performAIReviewerAnalysis(analysisData);
             
             // Enhance with RC account mapping and metadata
-            const enhancedRecommendations = await this.enhanceWithMetadata(persistenceRead, geminiRecommendations);
+            const enhancedRecommendations = await this.enhanceWithMetadata(persistenceRead, aiRecommendations);
             
             // Return top 3, prioritizing those with RC accounts
             const sortedRecommendations = this.prioritizeAndSort(enhancedRecommendations);
@@ -167,9 +167,9 @@ export class ReviewerMatchingService {
     }
 
     /**
-     * Use Gemini to analyze and rank potential reviewers
+     * Use AI to analyze and rank potential reviewers
      */
-    private async performGeminiReviewerAnalysis(data: ReviewerAnalysisData): Promise<ReviewerRecommendation[]> {
+    private async performAIReviewerAnalysis(data: ReviewerAnalysisData): Promise<ReviewerRecommendation[]> {
         const systemInstruction = `You are an expert at matching code reviewers to pull requests in open source projects.
 
 Your task is to analyze the PR and potential reviewers, then recommend the top reviewers based on:
@@ -224,9 +224,9 @@ Rank these reviewers by their suitability to review this specific PR. Consider:
 
 Provide detailed reasoning for each recommendation.`;
 
-        const result = await this.geminiService.makeGeminiRequest(prompt, systemInstruction, {
+        const result = await this.aiService.makeAIRequest(prompt, systemInstruction, {
             temperature: 0.3,
-            maxOutputTokens: 2048
+            maxTokens: 2048
         });
 
         if (result.success) {
@@ -261,14 +261,14 @@ Provide detailed reasoning for each recommendation.`;
                         };
                     });
                 } else {
-                    throw new Error('No JSON array found in Gemini response');
+                    throw new Error('No JSON array found in AI response');
                 }
             } catch (parseError) {
-                this.app.getLogger().warn(`Failed to parse Gemini reviewer analysis: ${parseError.message}`);
+                this.app.getLogger().warn(`Failed to parse AI reviewer analysis: ${parseError.message}`);
                 throw new Error(`Analysis parsing failed: ${parseError.message}`);
             }
         } else {
-            throw new Error(`Gemini analysis failed: ${result.error}`);
+            throw new Error(`AI analysis failed: ${result.error}`);
         }
     }
 
@@ -349,13 +349,13 @@ Provide detailed reasoning for each recommendation.`;
                 return a.codeownersMatch ? -1 : 1;
             }
             
-            // Tertiary: Gemini score
+            // Tertiary: AI score
             return b.score - a.score;
         });
     }
 
     /**
-     * Fallback recommendations when Gemini analysis fails
+     * Fallback recommendations when AI analysis fails
      */
     private async getFallbackReviewers(persistenceRead: IPersistenceRead, pr: GitHubPullRequest, repoName: string): Promise<ReviewerRecommendation[]> {
         this.app.getLogger().info(`Using fallback reviewer selection for PR #${pr.number}`);

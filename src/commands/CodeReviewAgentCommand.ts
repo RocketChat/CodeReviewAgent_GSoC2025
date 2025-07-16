@@ -16,6 +16,7 @@ import { authorize } from "./subcommands/authorize";
 import { handleSpamCommand } from "./subcommands/spam";
 import { handleStatusCommand } from "./subcommands/status";
 import { handleTriggerCommand } from "./subcommands/trigger";
+import { handleUsernameCommand } from "./subcommands/username";
 import { sendNotification } from "../helpers/message";
 
 export class CodeReviewAgentCommand implements ISlashCommand {
@@ -89,6 +90,17 @@ export class CodeReviewAgentCommand implements ISlashCommand {
           persistence
         );
         break;
+      case "username":
+        await handleUsernameCommand(
+          this.app,
+          read,
+          modify,
+          context.getSender(),
+          context.getRoom(),
+          persistence,
+          args
+        );
+        break;
       case "help":
       default:
         await this.displayAppHelpMessage(
@@ -124,7 +136,10 @@ export class CodeReviewAgentCommand implements ISlashCommand {
 • \`spam list\` - List pending spam reviews
 • \`spam approve <pr_id>\` - Approve flagged PR
 • \`spam reject <pr_id>\` - Reject as spam
-• \`spam ignore <pr_id>\` - Ignore PR`
+• \`spam ignore <pr_id>\` - Ignore PR
+• \`username\` - List pending username mappings
+• \`username approve <id>\` - Approve username mapping
+• \`username reject <id> [reason]\` - Reject username mapping`
       : "";
 
     const text = `🤖 **Code Review Agent Commands**
@@ -132,17 +147,22 @@ export class CodeReviewAgentCommand implements ISlashCommand {
 **📋 General Commands:**
 • \`help\` - Show this help message
 • \`auth\` - Authenticate with GitHub
+• \`username <github-username>\` - Submit GitHub username for review
 • \`status\` - Show app status and activity${adminCommands}
 
 **💡 Examples:**
 • \`/code-review-agent auth\`
-• \`/code-review-agent status\`${isAdmin ? "\n• `/code-review-agent spam`" : ""}
+• \`/code-review-agent username octocat\`
+• \`/code-review-agent status\`${isAdmin ? "\n• `/code-review-agent spam`\n• `/code-review-agent username`" : ""}
 
 **🚀 About:**
 This app helps streamline code reviews by:
 • 🤖 AI-powered spam detection
 • 👥 Smart reviewer matching
 • 🔔 Automated notifications
+
+**🔗 Account Linking:**
+You can link your GitHub account via OAuth (\`auth\`) or submit your username for admin review (\`username\`).
 
 Need help? Check the app settings for configuration options.`;
 
