@@ -31,7 +31,7 @@ export async function handleOnPreSettingUpdate(
       }
       break;
     }
-    case AppSettingsEnum.GEMINI_API_KEY_ID: {
+    case AppSettingsEnum.AI_PROVIDER_API_KEY_ID: {
       if (!ValidationHelper.isValidApiKey(value)) {
         return context.oldSetting;
       }

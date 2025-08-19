@@ -2,39 +2,44 @@ import { IHttp, IHttpResponse } from '@rocket.chat/apps-engine/definition/access
 import { CodeReviewAgentApp } from '../../CodeReviewAgentApp';
 import { AppSettingsEnum } from '../config/settings';
 
-export interface GeminiRequest {
-    contents: Array<{
-        parts: Array<{
-            text: string;
-        }>;
-    }>;
-    generationConfig?: {
-        temperature?: number;
-        topK?: number;
-        topP?: number;
-        maxOutputTokens?: number;
-        stopSequences?: string[];
-    };
+// OpenAI-compatible request/response interfaces
+export interface ChatCompletionMessage {
+    role: 'system' | 'user' | 'assistant';
+    content: string;
 }
 
-export interface GeminiResponse {
-    candidates: Array<{
-        content: {
-            parts: Array<{
-                text: string;
-            }>;
-        };
-        finishReason: string;
+export interface ChatCompletionRequest {
+    model: string;
+    messages: ChatCompletionMessage[];
+    temperature?: number;
+    max_tokens?: number;
+    top_p?: number;
+    frequency_penalty?: number;
+    presence_penalty?: number;
+    stop?: string | string[];
+}
+
+export interface ChatCompletionResponse {
+    id: string;
+    object: string;
+    created: number;
+    model: string;
+    choices: Array<{
         index: number;
+        message: {
+            role: string;
+            content: string;
+        };
+        finish_reason: string;
     }>;
-    usageMetadata?: {
-        promptTokenCount: number;
-        candidatesTokenCount: number;
-        totalTokenCount: number;
+    usage?: {
+        prompt_tokens: number;
+        completion_tokens: number;
+        total_tokens: number;
     };
 }
 
-export interface GeminiAnalysisResult {
+export interface AIAnalysisResult {
     success: boolean;
     result?: any;
     reasoning?: string;
@@ -46,94 +51,107 @@ export interface GeminiAnalysisResult {
     };
 }
 
-export class GeminiService {
+export class AIService {
     constructor(private app: CodeReviewAgentApp) {}
 
     private async getApiConfig(): Promise<{ apiKey: string; baseUrl: string; model: string }> {
         const settings = this.app.getAccessors().environmentReader.getSettings();
         
-        const apiKey = await settings.getValueById(AppSettingsEnum.GEMINI_API_KEY_ID);
-        const baseUrl = await settings.getValueById(AppSettingsEnum.GEMINI_BASE_URL_ID);
-        const model = await settings.getValueById(AppSettingsEnum.GEMINI_MODEL_ID);
+        const apiKey = await settings.getValueById(AppSettingsEnum.AI_PROVIDER_API_KEY_ID);
+        const baseUrl = await settings.getValueById(AppSettingsEnum.AI_PROVIDER_BASE_URL_ID);
+        const model = await settings.getValueById(AppSettingsEnum.AI_MODEL_ID);
         
         if (!apiKey) {
-            throw new Error('Gemini API key not configured');
+            throw new Error('AI provider API key not configured');
+        }
+        
+        if (!baseUrl) {
+            throw new Error('AI provider base URL not configured');
         }
         
         return { apiKey, baseUrl, model };
     }
 
-    public async makeGeminiRequest(
+    public async makeAIRequest(
         prompt: string, 
         systemInstruction?: string,
-        config?: Partial<GeminiRequest['generationConfig']>
-    ): Promise<GeminiAnalysisResult> {
+        config?: {
+            temperature?: number;
+            maxTokens?: number;
+            topP?: number;
+        }
+    ): Promise<AIAnalysisResult> {
         try {
             const { apiKey, baseUrl, model } = await this.getApiConfig();
             const httpClient = this.app.getAccessors().http;
             
-            // Prepare the content with system instruction if provided
-            const contents: Array<{ parts: Array<{ text: string }> }> = [];
+            // Build messages array in OpenAI format
+            const messages: ChatCompletionMessage[] = [];
             
             if (systemInstruction) {
-                contents.push({
-                    parts: [{ text: systemInstruction }]
+                messages.push({
+                    role: 'system',
+                    content: systemInstruction
                 });
             }
             
-            contents.push({
-                parts: [{ text: prompt }]
+            messages.push({
+                role: 'user',
+                content: prompt
             });
 
-            const requestBody: GeminiRequest = {
-                contents,
-                generationConfig: {
-                    temperature: 0.7,
-                    topK: 40,
-                    topP: 0.95,
-                    maxOutputTokens: 2048,
-                    ...config
-                }
+            const requestBody: ChatCompletionRequest = {
+                model,
+                messages,
+                temperature: config?.temperature ?? 0.7,
+                max_tokens: config?.maxTokens ?? 2048,
+                top_p: config?.topP ?? 0.95
             };
 
-            const url = `${baseUrl}/models/${model}:generateContent?key=${apiKey}`;
+            // Ensure baseUrl ends with /v1 for OpenAI compatibility
+            const normalizedBaseUrl = baseUrl.endsWith('/v1') || baseUrl.endsWith('/v1/') 
+                ? baseUrl.replace(/\/$/, '') 
+                : `${baseUrl.replace(/\/$/, '')}/v1`;
+            
+            const url = `${normalizedBaseUrl}/chat/completions`;
             
             const response: IHttpResponse = await httpClient.post(url, {
                 headers: {
-                    'Content-Type': 'application/json'
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${apiKey}`
                 },
                 data: requestBody
             });
 
             if (response.statusCode !== 200) {
-                throw new Error(`Gemini API error: ${response.statusCode} - ${response.content}`);
+                throw new Error(`AI API error: ${response.statusCode} - ${response.content}`);
             }
 
-            const geminiResponse = response.data as GeminiResponse;
+            const aiResponse = response.data as ChatCompletionResponse;
             
-            if (!geminiResponse.candidates || geminiResponse.candidates.length === 0) {
-                throw new Error('No response candidates from Gemini API');
+            if (!aiResponse.choices || aiResponse.choices.length === 0) {
+                throw new Error('No response choices from AI API');
             }
 
-            const candidate = geminiResponse.candidates[0];
-            if (!candidate.content || !candidate.content.parts || candidate.content.parts.length === 0) {
-                throw new Error('Invalid response structure from Gemini API');
+            const choice = aiResponse.choices[0];
+            if (!choice.message || !choice.message.content) {
+                throw new Error('Invalid response structure from AI API');
             }
 
-            const responseText = candidate.content.parts[0].text;
+            const responseText = choice.message.content;
 
             return {
                 success: true,
                 result: responseText,
-                tokenUsage: geminiResponse.usageMetadata ? {
-                    promptTokens: geminiResponse.usageMetadata.promptTokenCount,
-                    completionTokens: geminiResponse.usageMetadata.candidatesTokenCount,
-                    totalTokens: geminiResponse.usageMetadata.totalTokenCount
+                tokenUsage: aiResponse.usage ? {
+                    promptTokens: aiResponse.usage.prompt_tokens,
+                    completionTokens: aiResponse.usage.completion_tokens,
+                    totalTokens: aiResponse.usage.total_tokens
                 } : undefined
             };
 
         } catch (error) {
-            this.app.getLogger().error(`Gemini API request failed: ${error.message}`);
+            this.app.getLogger().error(`AI API request failed: ${error.message}`);
             return {
                 success: false,
                 error: error.message
@@ -153,7 +171,7 @@ export class GeminiService {
         };
         filesChanged: string[];
         diffSummary: string;
-    }): Promise<GeminiAnalysisResult> {
+    }): Promise<AIAnalysisResult> {
         const systemInstruction = `You are a code review assistant that analyzes pull requests for spam probability. 
         
 Analyze the provided PR data and return a JSON response with:
@@ -191,9 +209,9 @@ ${prData.diffSummary}
 
 Provide your analysis as JSON only.`;
 
-        const result = await this.makeGeminiRequest(prompt, systemInstruction, {
-            temperature: 0.3, // Lower temperature for more consistent analysis
-            maxOutputTokens: 1024
+        const result = await this.makeAIRequest(prompt, systemInstruction, {
+            temperature: 0.2,
+            maxTokens: 1024
         });
 
         if (result.success) {
@@ -212,7 +230,7 @@ Provide your analysis as JSON only.`;
                     throw new Error('No JSON found in response');
                 }
             } catch (parseError) {
-                this.app.getLogger().warn(`Failed to parse Gemini JSON response: ${parseError.message}`);
+                this.app.getLogger().warn(`Failed to parse AI JSON response: ${parseError.message}`);
                 return {
                     success: false,
                     error: `Failed to parse analysis: ${parseError.message}`
@@ -231,7 +249,7 @@ Provide your analysis as JSON only.`;
         codeowners: { [filePath: string]: string[] };
         commitHistory: { [filePath: string]: Array<{ author: string; commits: number; lastCommit: string }> };
         potentialReviewers: string[];
-    }): Promise<GeminiAnalysisResult> {
+    }): Promise<AIAnalysisResult> {
         const systemInstruction = `You are a code review assistant that finds the best reviewers for pull requests.
 
 Analyze the provided data and return a JSON response with top 3 reviewers:
@@ -281,9 +299,9 @@ ${prData.potentialReviewers.join(', ')}
 
 Provide your analysis as JSON only with the top 3 reviewers ranked by suitability.`;
 
-        const result = await this.makeGeminiRequest(prompt, systemInstruction, {
+        const result = await this.makeAIRequest(prompt, systemInstruction, {
             temperature: 0.4,
-            maxOutputTokens: 1536
+            maxTokens: 1536
         });
 
         if (result.success) {
@@ -301,7 +319,7 @@ Provide your analysis as JSON only with the top 3 reviewers ranked by suitabilit
                     throw new Error('No JSON found in response');
                 }
             } catch (parseError) {
-                this.app.getLogger().warn(`Failed to parse Gemini JSON response: ${parseError.message}`);
+                this.app.getLogger().warn(`Failed to parse AI JSON response: ${parseError.message}`);
                 return {
                     success: false,
                     error: `Failed to parse analysis: ${parseError.message}`
@@ -311,4 +329,4 @@ Provide your analysis as JSON only with the top 3 reviewers ranked by suitabilit
 
         return result;
     }
-}
+} 

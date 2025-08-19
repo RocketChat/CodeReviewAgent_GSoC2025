@@ -8,7 +8,7 @@ import type {
 import type { IOAuth2Client } from "@rocket.chat/apps-engine/definition/oauth2/IOAuth2";
 import { PRService } from "../services/PRService";
 import { GitHubAPIService } from "../services/GitHubAPIService";
-import { GeminiService } from "../services/GeminiService";
+import { AIService } from "../services/AIService";
 import { CodeownersService } from "../services/CodeownersService";
 import { SpamDetectionService } from "../services/SpamDetectionService";
 import { ReviewerMatchingService } from "../services/ReviewerMatchingService";
@@ -19,7 +19,7 @@ export interface IAppInterface {
   getOauth2ClientInstance(): IOAuth2Client;
   getPRService(): PRService;
   getGitHubService(): GitHubAPIService;
-  getGeminiService(): GeminiService;
+  getAIService(): AIService;
   getCodeownersService(): CodeownersService;
   getSpamDetectionService(): SpamDetectionService;
   getReviewerMatchingService(): ReviewerMatchingService;

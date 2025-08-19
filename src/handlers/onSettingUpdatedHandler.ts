@@ -13,7 +13,7 @@ export async function handleOnSettingUpdated(
   read: IRead,
   http: IHttp,
   logger: ILogger,
-  clearGeminiServices: () => void,
+  clearAIServices: () => void,
   clearGitHubServices: () => void
 ): Promise<void> {
   switch (setting.id) {
@@ -44,12 +44,12 @@ export async function handleOnSettingUpdated(
         );
       }
       break;
-    case AppSettingsEnum.GEMINI_API_KEY_ID:
-    case AppSettingsEnum.GEMINI_BASE_URL_ID:
-    case AppSettingsEnum.GEMINI_MODEL_ID:
-      clearGeminiServices();
+    case AppSettingsEnum.AI_PROVIDER_API_KEY_ID:
+    case AppSettingsEnum.AI_PROVIDER_BASE_URL_ID:
+    case AppSettingsEnum.AI_MODEL_ID:
+      clearAIServices();
       logger.info(
-        `Gemini setting '${setting.id}' updated, cleared dependent services`
+        `AI setting '${setting.id}' updated, cleared dependent services`
       );
       break;
     case AppSettingsEnum.ORG_ADMIN_PAT_TOKEN_ID:

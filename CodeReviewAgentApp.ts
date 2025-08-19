@@ -29,7 +29,7 @@ import { ISetting } from "@rocket.chat/apps-engine/definition/settings";
 // Import services
 import { PRService } from "./src/services/PRService";
 import { GitHubAPIService } from "./src/services/GitHubAPIService";
-import { GeminiService } from "./src/services/GeminiService";
+import { AIService } from "./src/services/AIService";
 import { CodeownersService } from "./src/services/CodeownersService";
 import { SpamDetectionService } from "./src/services/SpamDetectionService";
 import { ReviewerMatchingService } from "./src/services/ReviewerMatchingService";
@@ -64,7 +64,7 @@ export class CodeReviewAgentApp extends App implements IAppInterface {
   // Services
   private prService?: PRService;
   private githubService?: GitHubAPIService;
-  private geminiService?: GeminiService;
+  private aiService?: AIService;
   private codeownersService?: CodeownersService;
   private spamDetectionService?: SpamDetectionService;
   private reviewerMatchingService?: ReviewerMatchingService;
@@ -100,11 +100,11 @@ export class CodeReviewAgentApp extends App implements IAppInterface {
     return this.githubService;
   }
 
-  public getGeminiService(): GeminiService {
-    if (!this.geminiService) {
-      this.geminiService = new GeminiService(this);
+  public getAIService(): AIService {
+    if (!this.aiService) {
+      this.aiService = new AIService(this);
     }
-    return this.geminiService;
+    return this.aiService;
   }
 
   public getCodeownersService(): CodeownersService {
@@ -261,7 +261,7 @@ ${quickReminder}Need help? Use \`/code-review-agent help\` for available command
       http,
       this.getLogger(),
       () => {
-        this.geminiService = undefined;
+        this.aiService = undefined;
         this.spamDetectionService = undefined;
         this.reviewerMatchingService = undefined;
       },
@@ -576,19 +576,19 @@ ${quickReminder}Need help? Use \`/code-review-agent help\` for available command
         }
       }
 
-      // Validate Gemini settings
+      // Validate AI settings
       const apiKey = await settingsReader.getValueById(
-        AppSettingsEnum.GEMINI_API_KEY_ID
+        AppSettingsEnum.AI_PROVIDER_API_KEY_ID
       );
       if (!apiKey || !ValidationHelper.isValidApiKey(apiKey)) {
-        errors.push("Invalid Gemini API key");
+        errors.push("Invalid AI provider API key");
       }
 
       const model = await settingsReader.getValueById(
-        AppSettingsEnum.GEMINI_MODEL_ID
+        AppSettingsEnum.AI_MODEL_ID
       );
       if (!model) {
-        errors.push("Gemini model selection is required");
+        errors.push("AI model selection is required");
       }
     } catch (error) {
       errors.push(`Settings validation error: ${error.message}`);
