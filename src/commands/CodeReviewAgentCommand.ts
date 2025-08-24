@@ -12,12 +12,14 @@ import { IUser } from "@rocket.chat/apps-engine/definition/users";
 import { IRoom } from "@rocket.chat/apps-engine/definition/rooms";
 
 import { IAppInterface } from "../interfaces/IAppInterface";
-import { authorize } from "./subcommands/authorize";
+import { handleAuthCommand } from "./subcommands/auth";
 import { handleSpamCommand } from "./subcommands/spam";
 import { handleStatusCommand } from "./subcommands/status";
 import { handleTriggerCommand } from "./subcommands/trigger";
-import { handleUsernameCommand } from "./subcommands/username";
-import { sendNotification } from "../helpers/message";
+import { isUserHighHierarchy, sendNotification } from "../helpers/message";
+import { usernameInputModal } from "../modals/UsernameInputModal";
+import { handleApprovalsCommand } from "./subcommands/approvals";
+import { handleCleanupCommand } from "./subcommands/cleanup";
 
 export class CodeReviewAgentCommand implements ISlashCommand {
   public command = "code-review-agent";
@@ -36,6 +38,10 @@ export class CodeReviewAgentCommand implements ISlashCommand {
   ): Promise<void> {
     const command = this.getCommandFromContextArguments(context);
     const args = context.getArguments().slice(1);
+    const triggerId = context.getTriggerId()!;
+    const room = context.getRoom()
+    const roomId = room.id;
+    const persistenceRead = read.getPersistenceReader();
 
     if (!command) {
       return await this.displayAppHelpMessage(
@@ -48,7 +54,7 @@ export class CodeReviewAgentCommand implements ISlashCommand {
 
     switch (command) {
       case "auth":
-        await authorize(
+        await handleAuthCommand(
           this.app,
           read,
           modify,
@@ -91,16 +97,31 @@ export class CodeReviewAgentCommand implements ISlashCommand {
         );
         break;
       case "username":
-        await handleUsernameCommand(
+        var modal = await usernameInputModal({ roomId });
+        await modify.getUiController().openSurfaceView(modal, { triggerId }, context.getSender());
+        break;
+      case "approvals":
+        await handleApprovalsCommand(
           this.app,
           read,
           modify,
           context.getSender(),
-          context.getRoom(),
+          room,
           persistence,
-          args
+          persistenceRead,
+          triggerId
         );
         break;
+        case "cleanup":
+          await handleCleanupCommand(
+            this.app,
+            modify,
+            context.getSender(),
+            room,
+            persistence,
+            persistenceRead
+          );
+          break;
       case "help":
       default:
         await this.displayAppHelpMessage(
@@ -124,36 +145,23 @@ export class CodeReviewAgentCommand implements ISlashCommand {
     user: IUser,
     room: IRoom
   ): Promise<void> {
-    const isAdmin =
-      user.roles &&
-      user.roles.some((role) => role === "admin" || role === "owner");
+    const isAdmin = await isUserHighHierarchy(user, read)
 
     const adminCommands = isAdmin
       ? `
 
 **🔧 Admin Commands:**
 • \`spam\` - Review spam-detected PRs
-• \`spam list\` - List pending spam reviews
-• \`spam approve <pr_id>\` - Approve flagged PR
-• \`spam reject <pr_id>\` - Reject as spam
-• \`spam ignore <pr_id>\` - Ignore PR
-• \`username\` - List pending username mappings
-• \`username approve <id>\` - Approve username mapping
-• \`username reject <id> [reason]\` - Reject username mapping`
+• \`approve\` - List pending username mappings`
       : "";
 
     const text = `🤖 **Code Review Agent Commands**
 
 **📋 General Commands:**
 • \`help\` - Show this help message
-• \`auth\` - Authenticate with GitHub
-• \`username <github-username>\` - Submit GitHub username for review
+• \`auth\` - Authenticate with GitHub (to link your GitHub account with Rocket.Chat account automatically)
+• \`username\` - Submit GitHub username for review (to link your GitHub account with Rocket.Chat account after admin approval)
 • \`status\` - Show app status and activity${adminCommands}
-
-**💡 Examples:**
-• \`/code-review-agent auth\`
-• \`/code-review-agent username octocat\`
-• \`/code-review-agent status\`${isAdmin ? "\n• `/code-review-agent spam`\n• `/code-review-agent username`" : ""}
 
 **🚀 About:**
 This app helps streamline code reviews by:

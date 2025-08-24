@@ -1,9 +1,11 @@
 import { CodeReviewAgentApp } from '../../CodeReviewAgentApp';
 import { AIService } from './AIService';
-import { GitHubAPIService, GitHubPullRequest, GitHubCommit } from './GitHubAPIService';
+import { GitHubAPIService, GitHubCommit } from './GitHubAPIService';
 import { CodeownersService } from './CodeownersService';
 import { UserMappingPersistence, UserMapping } from '../persistence/UserMappingPersistence';
-import { IPersistenceRead } from '@rocket.chat/apps-engine/definition/accessors';
+import { IModify, IPersistence, IPersistenceRead, IRead } from '@rocket.chat/apps-engine/definition/accessors';
+import { PRPersistence, StoredPR } from '../persistence/PRPersistence';
+import { ReviewAssignmentPersistence } from '../persistence/ReviewAssignmentPersistence';
 
 export interface ReviewerRecommendation {
     username: string;
@@ -18,12 +20,11 @@ export interface ReviewerRecommendation {
 }
 
 export interface ReviewerAnalysisData {
-    pr: GitHubPullRequest;
+    pr: StoredPR;
     files: any[];
     codeownersMatches: string[];
     commitHistory: { [file: string]: GitHubCommit[] };
     potentialReviewers: string[];
-    repoName: string;
 }
 
 export class ReviewerMatchingService {
@@ -40,12 +41,12 @@ export class ReviewerMatchingService {
     /**
      * Main entry point - find the top 3 reviewers for a PR
      */
-    public async findReviewers(persistenceRead: IPersistenceRead, pr: GitHubPullRequest, repoName: string): Promise<ReviewerRecommendation[]> {
+    public async findReviewers(persistenceRead: IPersistenceRead, pr: StoredPR, repoName: string): Promise<ReviewerRecommendation[]> {
         try {
-            this.app.getLogger().info(`Finding reviewers for PR #${pr.number} in ${repoName}`);
+            this.app.getLogger().info(`Finding reviewers for PR ID: ${pr.id} #${pr.number} in ${repoName}`);
 
             // Gather analysis data
-            const analysisData = await this.gatherReviewerAnalysisData(persistenceRead, pr, repoName);
+            const analysisData = await this.gatherReviewerAnalysisData(persistenceRead, pr);
             
             // Use AI to analyze and rank reviewers
             const aiRecommendations = await this.performAIReviewerAnalysis(analysisData);
@@ -63,42 +64,41 @@ export class ReviewerMatchingService {
             this.app.getLogger().error(`Reviewer matching failed for PR #${pr.number}: ${error.message}`);
             
             // Return fallback recommendations based on CODEOWNERS only
-            return await this.getFallbackReviewers(persistenceRead, pr, repoName);
+            return await this.getFallbackReviewers(persistenceRead, pr);
         }
     }
 
     /**
      * Gather comprehensive data for reviewer analysis
      */
-    private async gatherReviewerAnalysisData(persistenceRead: IPersistenceRead, pr: GitHubPullRequest, repoName: string): Promise<ReviewerAnalysisData> {
-        const [owner, repo] = repoName.split('/');
+    private async gatherReviewerAnalysisData(persistenceRead: IPersistenceRead, pr: StoredPR): Promise<ReviewerAnalysisData> {
+        const [owner, repo, number] = pr.id.split('/');
 
         // Get PR files
-        const files = await this.githubService.getPullRequestFiles(owner, repo, pr.number);
+        const files = await this.githubService.getPullRequestFiles(owner, repo, parseInt(number));
         
         // Get CODEOWNERS matches for changed files
-        const codeownersMatches = await this.getCodeownersMatches(persistenceRead, files, repoName);
+        const codeownersMatches = await this.getCodeownersMatches(persistenceRead, files, pr.repoName);
         
         // Get recent commit history for changed files (last 6 months)
         const commitHistory = await this.getCommitHistoryForFiles(files, owner, repo);
         
         // Extract all potential reviewers from codeowners + commit history
-        const potentialReviewers = this.extractPotentialReviewers(codeownersMatches, commitHistory, pr.user.login);
+        const potentialReviewers = this.extractPotentialReviewers(codeownersMatches, commitHistory, pr.author.username);
 
         return {
             pr,
             files,
             codeownersMatches,
             commitHistory,
-            potentialReviewers,
-            repoName
+            potentialReviewers
         };
     }
 
     /**
      * Get CODEOWNERS matches for the changed files
      */
-    private async getCodeownersMatches(persistenceRead: IPersistenceRead,files: any[], repoName: string): Promise<string[]> {
+    private async getCodeownersMatches(persistenceRead: IPersistenceRead, files: any[], repoName: string): Promise<string[]> {
         try {
             const matches: string[] = [];
             
@@ -199,10 +199,10 @@ Rank by suitability (highest score first). Return 3-6 reviewers maximum.`;
         
         const prompt = `Analyze and rank reviewers for this pull request:
 
-**Repository:** ${data.repoName}
+**Repository:** ${data.pr.repoName}
 **PR Title:** ${data.pr.title}
 **PR Description:**
-${data.pr.body || 'No description provided'}
+${data.pr.description || 'No description provided'}
 
 **Files Changed (${data.files.length} files):**
 ${data.files.map(f => `- ${f.filename} (+${f.additions}/-${f.deletions})`).join('\n')}
@@ -320,6 +320,7 @@ Provide detailed reasoning for each recommendation.`;
     private async enhanceWithMetadata(persistenceRead: IPersistenceRead, recommendations: ReviewerRecommendation[]): Promise<ReviewerRecommendation[]> {
 
         for (const rec of recommendations) {
+            this.app.getLogger().info(`Reviewer ${rec.username} has expertise in ${rec.expertise} and familarity level ${rec.familiarityLevel}, ${rec.reasoning}, hence AI confidence is ${rec.score}`)
             try {
                 const userMapping = await UserMappingPersistence.getUserMappingByGithubUsername(rec.username, persistenceRead);
                 if (userMapping) {
@@ -357,13 +358,13 @@ Provide detailed reasoning for each recommendation.`;
     /**
      * Fallback recommendations when AI analysis fails
      */
-    private async getFallbackReviewers(persistenceRead: IPersistenceRead, pr: GitHubPullRequest, repoName: string): Promise<ReviewerRecommendation[]> {
+    private async getFallbackReviewers(persistenceRead: IPersistenceRead, pr: StoredPR): Promise<ReviewerRecommendation[]> {
         this.app.getLogger().info(`Using fallback reviewer selection for PR #${pr.number}`);
         
         try {
-            const [owner, repo] = repoName.split('/');
-            const files = await this.githubService.getPullRequestFiles(owner, repo, pr.number);
-            const codeownersMatches = await this.getCodeownersMatches(persistenceRead, files, repoName);
+            const [owner, repo, number] = pr.id.split('/');
+            const files = await this.githubService.getPullRequestFiles(owner, repo, parseInt(number));
+            const codeownersMatches = await this.getCodeownersMatches(persistenceRead, files, pr.repoName);
             
             const fallbackRecommendations: ReviewerRecommendation[] = codeownersMatches.slice(0, 3).map(username => ({
                 username: username.startsWith('@') ? username.slice(1) : username,
@@ -382,4 +383,44 @@ Provide detailed reasoning for each recommendation.`;
             return [];
         }
     }
+
+    /**
+     * Send reminders to all review assignments 
+     */
+    public async sendReviewReminders(read: IRead, modify: IModify, persistence: IPersistence, persistenceRead: IPersistenceRead): Promise<void> {
+        try {
+            const notificationService = this.app.getNotificationService();
+
+            const reviewAssignments = await ReviewAssignmentPersistence.getAllPendingReviewAssignments(persistenceRead);
+            if (!reviewAssignments) {
+                this.app.getLogger().info(`No pending review assignments`);
+                return;
+            }
+            
+            for (const reviewAssignment of reviewAssignments) {
+                const reviewer: ReviewerRecommendation = {
+                    username: reviewAssignment.githubUsername,
+                    reasoning: reviewAssignment.reasoning,
+                    expertise: reviewAssignment.expertise,
+                    familiarityLevel: reviewAssignment.familiarityLevel,
+                    score: reviewAssignment.score,
+                    codeownersMatch: reviewAssignment.codeownersMatch,
+                    recentActivity: reviewAssignment.recentActivity,
+                    hasRocketChatAccount: true,
+                    rocketchatUserId: reviewAssignment.rcUserId,
+                };
+            
+                const referencedPr = await PRPersistence.getPR(reviewAssignment.prId, persistenceRead);
+            
+                await notificationService.sendReviewerNotification(
+                    referencedPr!, reviewer, read, modify, persistence
+                );
+            }
+
+        } catch (error) {
+            this.app.getLogger().error(`Failed to send review reminders: ${error.message}`);
+            
+        }
+    }
+
 }

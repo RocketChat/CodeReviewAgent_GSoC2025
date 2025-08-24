@@ -2,7 +2,6 @@ import { IPersistence, IPersistenceRead } from '@rocket.chat/apps-engine/definit
 import { RocketChatAssociationModel, RocketChatAssociationRecord } from '@rocket.chat/apps-engine/definition/metadata';
 
 export interface PendingUserMapping {
-    id: string;
     rocketchatUserId: string;
     rocketchatUsername: string;
     githubUsername: string;
@@ -31,22 +30,22 @@ export class PendingUserMappingPersistence {
 
     // ✅ WRITE operations
     static async savePendingUserMapping(mapping: PendingUserMapping, persistenceWrite: IPersistence): Promise<void> {
-        const association = new RocketChatAssociationRecord(
-            RocketChatAssociationModel.MISC,
-            `${this.PENDING_USER_MAPPING_ASSOCIATION_KEY}:${mapping.id}`
-        );
-        await persistenceWrite.updateByAssociation(association, mapping, true);
+        const associations: Array<RocketChatAssociationRecord> = [
+            new RocketChatAssociationRecord(RocketChatAssociationModel.MISC, this.PENDING_USER_MAPPING_ASSOCIATION_KEY),
+            new RocketChatAssociationRecord(RocketChatAssociationModel.USER, mapping.rocketchatUserId)
+        ];
+        await persistenceWrite.updateByAssociations(associations, mapping, true);
     }
 
     static async updatePendingUserMappingStatus(
-        id: string,
+        rocketchatUserId: string,
         status: PendingUserMapping['status'],
         reviewedBy: string,
         persistenceWrite: IPersistence,
         persistenceRead: IPersistenceRead,
         rejectionReason?: string
     ): Promise<void> {
-        const existingMapping = await this.getPendingUserMapping(id, persistenceRead);
+        const existingMapping = await this.getPendingUserMapping(rocketchatUserId, persistenceRead);
         if (existingMapping) {
             const updatedMapping = {
                 ...existingMapping,
@@ -59,21 +58,22 @@ export class PendingUserMappingPersistence {
         }
     }
 
-    static async deletePendingUserMapping(id: string, persistenceWrite: IPersistence): Promise<void> {
-        const association = new RocketChatAssociationRecord(
-            RocketChatAssociationModel.MISC,
-            `${this.PENDING_USER_MAPPING_ASSOCIATION_KEY}:${id}`
-        );
-        await persistenceWrite.removeByAssociation(association);
+    static async deletePendingUserMapping(rocketchatUserId: string, persistenceWrite: IPersistence): Promise<void> {
+        const associations: Array<RocketChatAssociationRecord> = [
+            new RocketChatAssociationRecord(RocketChatAssociationModel.MISC, this.PENDING_USER_MAPPING_ASSOCIATION_KEY),
+            new RocketChatAssociationRecord(RocketChatAssociationModel.USER, rocketchatUserId)
+        ];
+        await persistenceWrite.removeByAssociations(associations);
     }
 
     // ✅ READ operations
-    static async getPendingUserMapping(id: string, persistenceRead: IPersistenceRead): Promise<PendingUserMapping | null> {
-        const association = new RocketChatAssociationRecord(
-            RocketChatAssociationModel.MISC,
-            `${this.PENDING_USER_MAPPING_ASSOCIATION_KEY}:${id}`
-        );
-        const result = await persistenceRead.readByAssociation(association);
+    static async getPendingUserMapping(rocketchatUserId: string, persistenceRead: IPersistenceRead): Promise<PendingUserMapping | null> {
+        const associations: Array<RocketChatAssociationRecord> = [
+            new RocketChatAssociationRecord(RocketChatAssociationModel.MISC, this.PENDING_USER_MAPPING_ASSOCIATION_KEY),
+            new RocketChatAssociationRecord(RocketChatAssociationModel.USER, rocketchatUserId)
+        ];
+
+        const result = await persistenceRead.readByAssociations(associations);
         if (result.length > 0) {
             return result[0] as PendingUserMapping;
         }
@@ -90,10 +90,10 @@ export class PendingUserMappingPersistence {
             RocketChatAssociationModel.MISC,
             this.PENDING_USER_MAPPING_ASSOCIATION_KEY
         );
-        const results = await persistenceRead.readByAssociations([association]);
+        const results = await persistenceRead.readByAssociation(association);
         return results ? results as PendingUserMapping[] : [];
     }
-
+    
     static async getPendingUserMappingByRocketChatUserId(rcUserId: string, persistenceRead: IPersistenceRead): Promise<PendingUserMapping | null> {
         const allMappings = await this.getAllPendingUserMappings(persistenceRead);
         return allMappings.find(mapping => mapping.rocketchatUserId === rcUserId && mapping.status === 'pending') || null;
@@ -102,5 +102,12 @@ export class PendingUserMappingPersistence {
     static async getPendingUserMappingByGithubUsername(githubUsername: string, persistenceRead: IPersistenceRead): Promise<PendingUserMapping | null> {
         const allMappings = await this.getAllPendingUserMappings(persistenceRead);
         return allMappings.find(mapping => mapping.githubUsername === githubUsername && mapping.status === 'pending') || null;
+    }
+
+
+    static async deleteAllPendingUserMapping(persistenceWrite: IPersistence): Promise<void> {
+        const associations: Array<RocketChatAssociationRecord> = [
+            new RocketChatAssociationRecord(RocketChatAssociationModel.MISC, this.PENDING_USER_MAPPING_ASSOCIATION_KEY)        ];
+        await persistenceWrite.removeByAssociations(associations);
     }
 } 

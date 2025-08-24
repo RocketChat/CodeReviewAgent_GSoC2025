@@ -7,7 +7,7 @@ import {
 import { IUser } from "@rocket.chat/apps-engine/definition/users";
 import { IRoom } from "@rocket.chat/apps-engine/definition/rooms";
 import { IAppInterface } from "../../interfaces/IAppInterface";
-import { sendNotification } from "../../helpers/message";
+import { isUserHighHierarchy, sendNotification } from "../../helpers/message";
 
 export async function handleTriggerCommand(
   app: IAppInterface,
@@ -18,20 +18,17 @@ export async function handleTriggerCommand(
   http: IHttp,
   persistence: IPersistence
 ): Promise<void> {
-  // Check admin permissions
-  if (
-    !user.roles ||
-    !user.roles.some((role) => role === "admin" || role === "owner")
-  ) {
-    await sendNotification({
-      modify: modify,
-      user: user,
-      room: room,
-      message:
-        "❌ **Access Denied**\n\nOnly administrators can trigger the pipeline manually.",
-    });
-    return;
-  }
+  // const isAdmin = await isUserHighHierarchy(user, read)
+  // if (isAdmin) {
+  //   await sendNotification({
+  //     modify: modify,
+  //     user: user,
+  //     room: room,
+  //     message:
+  //       "❌ **Access Denied**\n\nOnly administrators can trigger the pipeline manually.",
+  //   });
+  //   return;
+  // }
 
   try {
     await sendNotification({

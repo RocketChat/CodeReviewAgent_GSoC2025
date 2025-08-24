@@ -1,0 +1,6 @@
+{
+    "slashcommand_params": "auth,spam,status,username",
+    "slashcommand_description": "Get nudged about PR reviews use /code-review-agent command.",
+    "code-review-agent-app-oauth-client-id": "OAuth Client ID",
+    "code-review-agent-app-oauth-client-secret": "OAuth Client Secret"
+}

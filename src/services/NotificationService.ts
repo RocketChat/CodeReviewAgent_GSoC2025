@@ -1,12 +1,11 @@
 import { IModify, IRead, IPersistence } from '@rocket.chat/apps-engine/definition/accessors';
 import { IUser } from '@rocket.chat/apps-engine/definition/users';
 import { CodeReviewAgentApp } from '../../CodeReviewAgentApp';
-import { GitHubPullRequest } from './GitHubAPIService';
 import { ReviewerRecommendation } from './ReviewerMatchingService';
-import { UserMappingPersistence } from '../persistence/UserMappingPersistence';
 import { sendDirectMessage } from '../helpers/message';
 import { LayoutBlock } from '@rocket.chat/ui-kit';
 import { getSectionBlock, getActionsBlock, getButton } from '../helpers/blockBuilder';
+import { StoredPR } from '../persistence/PRPersistence';
 
 export interface NotificationResult {
     successful: number;
@@ -26,7 +25,7 @@ export class NotificationService {
      * Send review notifications to all recommended reviewers
      */
     public async notifyReviewers(
-        pr: GitHubPullRequest, 
+        pr: StoredPR, 
         reviewers: ReviewerRecommendation[], 
         repoName: string,
         read: IRead,
@@ -44,7 +43,7 @@ export class NotificationService {
         for (const reviewer of reviewers) {
             try {
                 const notificationResult = await this.sendReviewerNotification(
-                    pr, reviewer, repoName, read, modify, persistence
+                    pr, reviewer, read, modify, persistence
                 );
 
                 if (notificationResult.success) {
@@ -80,10 +79,9 @@ export class NotificationService {
     /**
      * Send notification to a single reviewer
      */
-    private async sendReviewerNotification(
-        pr: GitHubPullRequest,
+    public async sendReviewerNotification(
+        pr: StoredPR,
         reviewer: ReviewerRecommendation,
-        repoName: string,
         read: IRead,
         modify: IModify,
         persistence: IPersistence
@@ -106,16 +104,13 @@ export class NotificationService {
                     reason: `Rocket.Chat user not found for ID ${reviewer.rocketchatUserId}` 
                 };
             }
-
-            // Build and send notification message
-            const message = this.buildNotificationMessage(pr, reviewer, repoName);
-            const blocks = this.buildNotificationBlocks(pr, reviewer, repoName);
+            const blocks = this.buildNotificationBlocks(pr, reviewer);
 
             await sendDirectMessage({
                 read: read,
                 modify: modify,
                 user: rcUser,
-                message: message,
+                message: '',
                 blocks: blocks,
                 persistence: persistence
             });
@@ -133,46 +128,20 @@ export class NotificationService {
     }
 
     /**
-     * Build notification message text
-     */
-    private buildNotificationMessage(pr: GitHubPullRequest, reviewer: ReviewerRecommendation, repoName: string): string {
-        const prUrl = `https://github.com/${repoName}/pull/${pr.number}`;
-        const expertiseText = reviewer.expertise.length > 0 ? ` (${reviewer.expertise.join(', ')})` : '';
-        
-        return `🔍 **You've been assigned to review a pull request!**
-
-**Repository:** ${repoName}
-**PR #${pr.number}:** ${pr.title}
-**Author:** @${pr.user.login}
-
-**Why you were selected:**
-${reviewer.reasoning}
-
-**Your expertise match:** ${reviewer.familiarityLevel}${expertiseText}
-${reviewer.codeownersMatch ? '🎯 **CODEOWNERS match**' : ''}
-${reviewer.recentActivity ? '📈 **Recent activity on these files**' : ''}
-
-**View PR:** ${prUrl}
-
-*Powered by Code Review Agent - helping you focus on the reviews that matter most.*`;
-    }
-
-    /**
      * Build interactive notification blocks
      */
-    private buildNotificationBlocks(pr: GitHubPullRequest, reviewer: ReviewerRecommendation, repoName: string): LayoutBlock[] {
-        const prUrl = `https://github.com/${repoName}/pull/${pr.number}`;
+    private buildNotificationBlocks(pr: StoredPR, reviewer: ReviewerRecommendation): LayoutBlock[] {
+        const prUrl = `https://github.com/${pr.repoOwner}/${pr.repoName}/pull/${pr.number}`;
         
         const blocks: LayoutBlock[] = [
-            getSectionBlock(`🔍 **New PR Review Assignment**
-
-**Repository:** ${repoName}
-**PR #${pr.number}:** ${pr.title}
-**Author:** @${pr.user.login}
-**Match Level:** ${reviewer.familiarityLevel} (${reviewer.score}/100)`),
+            getSectionBlock(`🔍 **New PR Review Assignment**\n
+**Repository:** ${pr.repoName}\n
+**PR #${pr.number}:** ${pr.title}\n
+**Author:** @${pr.author.username}\n
+**Match Level:** ${reviewer.familiarityLevel} (${reviewer.score}/100)`, undefined, "mrkdwn"),
             
             getSectionBlock(`**Why you were selected:**
-${reviewer.reasoning}`),
+${reviewer.reasoning}`, undefined, "mrkdwn"),
             
             getActionsBlock('pr_actions', [
                 getButton({
@@ -187,7 +156,19 @@ ${reviewer.reasoning}`),
                     actionId: 'view_files',
                     value: `${prUrl}/files`,
                     url: `${prUrl}/files`
-                })
+                }),
+                getButton({
+                    labelText: "✅ Mark as Done",
+                    actionId: 'done',
+                    value: `reviewId`,
+                    style: "primary",
+                  }),
+                  getButton({
+                    labelText: "❌ Mark as Ignored",
+                    actionId: 'ignored',
+                    value: `reviewId`,
+                    style: "danger",
+                  }),
             ])
         ];
 
@@ -208,7 +189,7 @@ ${reviewer.reasoning}`),
      * Send notification to admins about successful PR processing
      */
     public async notifyAdminsOfProcessing(
-        pr: GitHubPullRequest,
+        pr: StoredPR,
         repoName: string,
         reviewers: ReviewerRecommendation[],
         notificationResult: NotificationResult,
@@ -252,7 +233,7 @@ ${reviewer.reasoning}`),
      * Build admin notification message
      */
     private buildAdminNotificationMessage(
-        pr: GitHubPullRequest,
+        pr: StoredPR,
         repoName: string,
         reviewers: ReviewerRecommendation[],
         notificationResult: NotificationResult
@@ -272,7 +253,7 @@ ${reviewer.reasoning}`),
 
 **Repository:** ${repoName}
 **PR #${pr.number}:** ${pr.title}
-**Author:** @${pr.user.login}
+**Author:** @${pr.author.username}
 
 **Reviewers Assigned (${reviewers.length} total):**
 ✅ **Successfully notified (${notificationResult.successful}):** ${successfulReviewers || 'None'}
@@ -311,7 +292,7 @@ ${notificationResult.failed > 0 ? `❌ **Failed notifications (${notificationRes
      * Send notification when spam is detected and queued for review
      */
     public async notifyAdminsOfSpamDetection(
-        pr: GitHubPullRequest,
+        pr: StoredPR,
         repoName: string,
         spamScore: number,
         reasoning: string,
@@ -331,7 +312,7 @@ ${notificationResult.failed > 0 ? `❌ **Failed notifications (${notificationRes
 
 **Repository:** ${repoName}
 **PR #${pr.number}:** ${pr.title}
-**Author:** @${pr.user.login}
+**Author:** @${pr.author.username}
 **Spam Score:** ${spamScore}/100
 
 **Analysis:**

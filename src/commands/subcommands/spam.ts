@@ -34,7 +34,7 @@ export async function handleSpamCommand(
   args: string[]
 ): Promise<void> {
   // Check if user has admin permissions
-  if (!isUserHighHierarchy(user)) {
+  if (!(await isUserHighHierarchy(user, read))) {
     await sendNotification({
       modify: modify,
       user: user,

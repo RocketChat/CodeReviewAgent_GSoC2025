@@ -33,7 +33,7 @@ export class CodeownersService {
             let codeownersContent: string | null = null;
             
             for (const location of locations) {
-                codeownersContent = await this.githubService.getFileContent(owner, repo, location);
+                codeownersContent = await this.githubService.getFileContent(owner, repo, location, "develop");
                 if (codeownersContent) {
                     this.app.getLogger().info(`Found CODEOWNERS at ${location} for ${owner}/${repo}`);
                     break;
@@ -223,161 +223,161 @@ export class CodeownersService {
         
         return Array.from(allOwners);
     }
-    /**
- * Get codeowners data for a repository from persistence
- */
-public async getCodeownersForRepo(repoName: string, persistenceRead: IPersistenceRead): Promise<any | null> {
-    try {
-        // Import at the top of the file: import { CodeownersPersistence } from '../persistence/CodeownersPersistence';
-        return await CodeownersPersistence.getCodeowners(repoName, persistenceRead);
-    } catch (error) {
-        this.app.getLogger().error(`Failed to get codeowners for ${repoName}: ${error.message}`);
-        return null;
-    }
-}
 
-/**
- * Get owners for a specific file path using stored codeowners data
- */
-public async getOwnersForPath(persistenceRead: IPersistenceRead, repoName: string, filePath: string): Promise<string[]> {
-    try {
-        const codeownersData = await this.getCodeownersForRepo(repoName, persistenceRead);
-        
-        if (!codeownersData || !codeownersData.entries) {
+    /**
+     * Get codeowners data for a repository from persistence
+     */
+    public async getCodeownersForRepo(repoName: string, persistenceRead: IPersistenceRead): Promise<any | null> {
+        try {
+            return await CodeownersPersistence.getCodeowners(repoName, persistenceRead);
+        } catch (error) {
+            this.app.getLogger().error(`Failed to get codeowners for ${repoName}: ${error.message}`);
+            return null;
+        }
+    }
+
+    /**
+     * Get owners for a specific file path using stored codeowners data
+     */
+    public async getOwnersForPath(persistenceRead: IPersistenceRead, repoName: string, filePath: string): Promise<string[]> {
+        try {
+            const codeownersData = await this.getCodeownersForRepo(repoName, persistenceRead);
+            
+            if (!codeownersData || !codeownersData.entries) {
+                return [];
+            }
+            
+            // Find owners using the stored patterns
+            return this.getOwnersForFile(filePath, codeownersData.entries);
+        } catch (error) {
+            this.app.getLogger().error(`Failed to get owners for ${filePath} in ${repoName}: ${error.message}`);
             return [];
         }
-        
-        // Find owners using the stored patterns
-        return this.getOwnersForFile(filePath, codeownersData.entries);
-    } catch (error) {
-        this.app.getLogger().error(`Failed to get owners for ${filePath} in ${repoName}: ${error.message}`);
-        return [];
     }
-}
 
-/**
- * Helper to get owners for a specific file using CODEOWNERS patterns
- */
-private getOwnersForFile(filePath: string, entries: any[]): string[] {
-    const owners: string[] = [];
-    
-    // Iterate through entries in reverse order (last match wins)
-    for (let i = entries.length - 1; i >= 0; i--) {
-        const entry = entries[i];
+    /**
+     * Helper to get owners for a specific file using CODEOWNERS patterns
+     */
+    private getOwnersForFile(filePath: string, entries: any[]): string[] {
+        const owners: string[] = [];
         
-        // Check if pattern matches the file path
-        if (this.doesPatternMatch(entry.pattern, filePath)) {
-            owners.push(...entry.owners);
-            break; // Last matching pattern wins
+        // Iterate through entries in reverse order (last match wins)
+        for (let i = entries.length - 1; i >= 0; i--) {
+            const entry = entries[i];
+            
+            // Check if pattern matches the file path
+            if (this.doesPatternMatch(entry.pattern, filePath)) {
+                owners.push(...entry.owners);
+                break; // Last matching pattern wins
+            }
         }
-    }
-    
-    return owners;
-}
-/**
- * Simple pattern matching for CODEOWNERS patterns
- * This is a simplified version - for production, you might want a more robust implementation
- */
-private doesPatternMatch(pattern: string, filePath: string): boolean {
-    // Convert CODEOWNERS pattern to regex-like matching
-    
-    // Handle exact paths
-    if (pattern === filePath) {
-        return true;
-    }
-    
-    // Handle directory patterns (ending with /)
-    if (pattern.endsWith('/')) {
-        return filePath.startsWith(pattern) || filePath.startsWith(pattern.slice(0, -1) + '/');
-    }
-    
-    // Handle wildcard patterns
-    if (pattern.includes('*')) {
-        const regexPattern = pattern
-            .replace(/\./g, '\\.')  // Escape dots
-            .replace(/\*/g, '.*');  // Convert * to .*
         
-        const regex = new RegExp(`^${regexPattern}$`);
-        return regex.test(filePath);
+        return owners;
     }
-    
-    // Handle extension patterns (*.js, *.ts, etc.)
-    if (pattern.startsWith('*.')) {
-        const extension = pattern.slice(1); // Remove the *
-        return filePath.endsWith(extension);
-    }
-    
-    // Handle glob patterns with more complex rules
-    if (pattern.includes('**')) {
-        // **/ means any subdirectory
-        const parts = pattern.split('**/');
-        if (parts.length === 2) {
-            const prefix = parts[0];
-            const suffix = parts[1];
-            
-            if (prefix && !filePath.startsWith(prefix)) {
-                return false;
-            }
-            
-            if (suffix && !filePath.includes('/' + suffix) && !filePath.endsWith(suffix)) {
-                return false;
-            }
-            
+    /**
+     * Simple pattern matching for CODEOWNERS patterns
+     * This is a simplified version - for production, you might want a more robust implementation
+     */
+    private doesPatternMatch(pattern: string, filePath: string): boolean {
+        // Convert CODEOWNERS pattern to regex-like matching
+        
+        // Handle exact paths
+        if (pattern === filePath) {
             return true;
         }
-    }
-    
-    // Default: check if file path starts with pattern (for directory matching)
-    return filePath.startsWith(pattern + '/') || filePath === pattern;
-}
-
-/**
- * Sync all repositories and store codeowners data
- */
-public async syncAllRepositories(persistence: IPersistence): Promise<{ [repoName: string]: CodeownersData | null }> {
-    try {
-        const settings = this.app.getAccessors().environmentReader.getSettings();
-        const repositoriesList = await settings.getValueById(AppSettingsEnum.REPOSITORIES_LIST_ID);
-        const ownerName = await settings.getValueById(AppSettingsEnum.OWNER_NAME_ID);
         
-        if (!repositoriesList || !ownerName) {
-            throw new Error('Repository list or owner name not configured');
+        // Handle directory patterns (ending with /)
+        if (pattern.endsWith('/')) {
+            return filePath.startsWith(pattern) || filePath.startsWith(pattern.slice(0, -1) + '/');
         }
         
-        const repositories = repositoriesList.split(',').map(repo => repo.trim()).filter(Boolean);
-        const results: { [repoName: string]: CodeownersData | null } = {};
+        // Handle wildcard patterns
+        if (pattern.includes('*')) {
+            const regexPattern = pattern
+                .replace(/\./g, '\\.')  // Escape dots
+                .replace(/\*/g, '.*');  // Convert * to .*
+            
+            const regex = new RegExp(`^${regexPattern}$`);
+            return regex.test(filePath);
+        }
         
-        for (const repo of repositories) {
-            try {
-                this.app.getLogger().info(`Syncing CODEOWNERS for ${repo}`);
-                const codeownersData = await this.fetchCodeowners(ownerName, repo);
-                results[repo] = codeownersData;
+        // Handle extension patterns (*.js, *.ts, etc.)
+        if (pattern.startsWith('*.')) {
+            const extension = pattern.slice(1); // Remove the *
+            return filePath.endsWith(extension);
+        }
+        
+        // Handle glob patterns with more complex rules
+        if (pattern.includes('**')) {
+            // **/ means any subdirectory
+            const parts = pattern.split('**/');
+            if (parts.length === 2) {
+                const prefix = parts[0];
+                const suffix = parts[1];
                 
-                if (codeownersData) {
-                    // Store in persistence
-                    await CodeownersPersistence.saveCodeowners(repo, {
-                        repoName: codeownersData.repoName,
-                        entries: codeownersData.entries.map(entry => ({
-                            pattern: entry.pattern,
-                            owners: entry.owners
-                        })),
-                        lastUpdated: codeownersData.lastUpdated
-                    }, persistence);
-                    
-                    this.app.getLogger().info(`Successfully synced CODEOWNERS for ${repo}`);
-                } else {
-                    this.app.getLogger().warn(`No CODEOWNERS found for ${repo}`);
+                if (prefix && !filePath.startsWith(prefix)) {
+                    return false;
                 }
-            } catch (error) {
-                this.app.getLogger().error(`Failed to sync CODEOWNERS for ${repo}: ${error.message}`);
-                results[repo] = null;
+                
+                if (suffix && !filePath.includes('/' + suffix) && !filePath.endsWith(suffix)) {
+                    return false;
+                }
+                
+                return true;
             }
         }
         
-        return results;
-    } catch (error) {
-        this.app.getLogger().error(`Failed to sync repositories: ${error.message}`);
-        throw error;
+        // Default: check if file path starts with pattern (for directory matching)
+        return filePath.startsWith(pattern + '/') || filePath === pattern;
     }
-}
+
+    /**
+     * Sync all repositories and store codeowners data
+     */
+    public async syncAllRepositories(persistence: IPersistence): Promise<{ [repoName: string]: CodeownersData | null }> {
+        try {
+            const settings = this.app.getAccessors().environmentReader.getSettings();
+            const repositoriesList = await settings.getValueById(AppSettingsEnum.REPOSITORIES_LIST_ID);
+            const ownerName = await settings.getValueById(AppSettingsEnum.OWNER_NAME_ID);
+            
+            if (!repositoriesList || !ownerName) {
+                throw new Error('Repository list or owner name not configured');
+            }
+            
+            const repositories = repositoriesList.split(',').map(repo => repo.trim()).filter(Boolean);
+            const results: { [repoName: string]: CodeownersData | null } = {};
+            
+            for (const repo of repositories) {
+                try {
+                    this.app.getLogger().info(`Syncing CODEOWNERS for ${repo}`);
+                    const codeownersData = await this.fetchCodeowners(ownerName, repo);
+                    results[repo] = codeownersData;
+                    
+                    if (codeownersData) {
+                        // Store in persistence
+                        await CodeownersPersistence.saveCodeowners(repo, {
+                            repoName: codeownersData.repoName,
+                            entries: codeownersData.entries.map(entry => ({
+                                pattern: entry.pattern,
+                                owners: entry.owners
+                            })),
+                            lastUpdated: codeownersData.lastUpdated
+                        }, persistence);
+                        
+                        this.app.getLogger().info(`Successfully synced CODEOWNERS for ${repo}`);
+                    } else {
+                        this.app.getLogger().warn(`No CODEOWNERS found for ${repo}`);
+                    }
+                } catch (error) {
+                    this.app.getLogger().error(`Failed to sync CODEOWNERS for ${repo}: ${error.message}`);
+                    results[repo] = null;
+                }
+            }
+            
+            return results;
+        } catch (error) {
+            this.app.getLogger().error(`Failed to sync repositories: ${error.message}`);
+            throw error;
+        }
+    }
 }

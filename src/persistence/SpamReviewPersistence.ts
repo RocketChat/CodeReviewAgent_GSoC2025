@@ -21,11 +21,11 @@ export class SpamReviewPersistence {
 
     // ✅ WRITE operations
     static async saveSpamReviewItem(item: SpamReviewItem, persistenceWrite: IPersistence): Promise<void> {
-        const association = new RocketChatAssociationRecord(
-            RocketChatAssociationModel.MISC,
-            `${this.SPAM_REVIEW_ASSOCIATION_KEY}:${item.prId}`
-        );
-        await persistenceWrite.updateByAssociation(association, item, true);
+        const associations: Array<RocketChatAssociationRecord> = [
+            new RocketChatAssociationRecord(RocketChatAssociationModel.MISC, this.SPAM_REVIEW_ASSOCIATION_KEY),
+            new RocketChatAssociationRecord(RocketChatAssociationModel.MISC, item.prId)
+        ];
+        await persistenceWrite.updateByAssociations(associations, item, true);
     }
 
     static async updateSpamReviewStatus(
@@ -48,20 +48,20 @@ export class SpamReviewPersistence {
     }
 
     static async deleteSpamReviewItem(prId: string, persistenceWrite: IPersistence): Promise<void> {
-        const association = new RocketChatAssociationRecord(
-            RocketChatAssociationModel.MISC,
-            `${this.SPAM_REVIEW_ASSOCIATION_KEY}:${prId}`
-        );
-        await persistenceWrite.removeByAssociation(association);
+        const associations: Array<RocketChatAssociationRecord> = [
+            new RocketChatAssociationRecord(RocketChatAssociationModel.MISC, this.SPAM_REVIEW_ASSOCIATION_KEY),
+            new RocketChatAssociationRecord(RocketChatAssociationModel.MISC, prId)
+        ];
+        await persistenceWrite.removeByAssociations(associations);
     }
 
     // ✅ READ operations
     static async getSpamReviewItem(prId: string, persistenceRead: IPersistenceRead): Promise<SpamReviewItem | null> {
-        const association = new RocketChatAssociationRecord(
-            RocketChatAssociationModel.MISC,
-            `${this.SPAM_REVIEW_ASSOCIATION_KEY}:${prId}`
-        );
-        const result = await persistenceRead.readByAssociation(association);
+        const associations: Array<RocketChatAssociationRecord> = [
+            new RocketChatAssociationRecord(RocketChatAssociationModel.MISC, this.SPAM_REVIEW_ASSOCIATION_KEY),
+            new RocketChatAssociationRecord(RocketChatAssociationModel.MISC, prId)
+        ];
+        const result = await persistenceRead.readByAssociations(associations);
                 if (result.length > 0) {
                             return result[0] as SpamReviewItem;
                         }

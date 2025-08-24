@@ -3,8 +3,9 @@ import { RocketChatAssociationModel, RocketChatAssociationRecord } from '@rocket
 
 export interface StoredPR {
     id: string;
+    repoOwner: string;
     repoName: string;
-    prNumber: number;
+    number: number;
     title: string;
     description: string;
     author: {
@@ -36,11 +37,11 @@ export class PRPersistence {
     private static readonly PR_ASSOCIATION_KEY = 'code-review-pr';
 
     static async savePR(pr: StoredPR, persistenceWrite: IPersistence): Promise<void> {
-        const association = new RocketChatAssociationRecord(
-            RocketChatAssociationModel.MISC,
-            `${this.PR_ASSOCIATION_KEY}:${pr.id}`
-        );
-        await persistenceWrite.updateByAssociation(association, pr, true);
+        const associations: Array<RocketChatAssociationRecord> = [
+            new RocketChatAssociationRecord(RocketChatAssociationModel.MISC, this.PR_ASSOCIATION_KEY),
+            new RocketChatAssociationRecord(RocketChatAssociationModel.MISC, pr.id)
+        ];
+        await persistenceWrite.updateByAssociations(associations, pr, true);
     }
 
     static async updatePRStatus(
@@ -63,19 +64,19 @@ export class PRPersistence {
     }
 
     static async deletePR(prId: string, persistenceWrite: IPersistence): Promise<void> {
-        const association = new RocketChatAssociationRecord(
-            RocketChatAssociationModel.MISC,
-            `${this.PR_ASSOCIATION_KEY}:${prId}`
-        );
-        await persistenceWrite.removeByAssociation(association);
+        const associations: Array<RocketChatAssociationRecord> = [
+            new RocketChatAssociationRecord(RocketChatAssociationModel.MISC, this.PR_ASSOCIATION_KEY),
+            new RocketChatAssociationRecord(RocketChatAssociationModel.MISC, prId)
+        ];
+        await persistenceWrite.removeByAssociations(associations);
     }
 
     static async getPR(prId: string, persistenceRead: IPersistenceRead): Promise<StoredPR | null> {
-        const association = new RocketChatAssociationRecord(
-            RocketChatAssociationModel.MISC,
-            `${this.PR_ASSOCIATION_KEY}:${prId}`
-        );
-        const result = await persistenceRead.readByAssociation(association);
+        const associations: Array<RocketChatAssociationRecord> = [
+            new RocketChatAssociationRecord(RocketChatAssociationModel.MISC, this.PR_ASSOCIATION_KEY),
+            new RocketChatAssociationRecord(RocketChatAssociationModel.MISC, prId)
+        ];
+        const result = await persistenceRead.readByAssociations(associations);
 
         if (result.length > 0) {
             return result[0] as StoredPR;
@@ -85,11 +86,10 @@ export class PRPersistence {
     }
 
     static async getAllPRs(persistenceRead: IPersistenceRead): Promise<StoredPR[]> {
-        const association = new RocketChatAssociationRecord(
-            RocketChatAssociationModel.MISC,
-            this.PR_ASSOCIATION_KEY
-        );
-        const results = await persistenceRead.readByAssociations([association]);
+        const associations: Array<RocketChatAssociationRecord> = [
+            new RocketChatAssociationRecord(RocketChatAssociationModel.MISC, this.PR_ASSOCIATION_KEY),
+        ];
+        const results = await persistenceRead.readByAssociations(associations);
         return results ? results as StoredPR[] : [];
     }
 

@@ -15,28 +15,28 @@ export class CodeownersPersistence {
 
     // ✅ WRITE operations
     static async saveCodeowners(repoName: string, data: StoredCodeowners, persistenceWrite: IPersistence): Promise<void> {
-        const association = new RocketChatAssociationRecord(
-            RocketChatAssociationModel.MISC,
-            `${this.CODEOWNERS_ASSOCIATION_KEY}:${repoName}`
-        );
-        await persistenceWrite.updateByAssociation(association, data, true);
+        const associations: Array<RocketChatAssociationRecord> = [
+            new RocketChatAssociationRecord(RocketChatAssociationModel.MISC, this.CODEOWNERS_ASSOCIATION_KEY),
+            new RocketChatAssociationRecord(RocketChatAssociationModel.MISC, repoName)
+        ];
+        await persistenceWrite.updateByAssociations(associations, data, true);
     }
 
     static async deleteCodeowners(repoName: string, persistenceWrite: IPersistence): Promise<void> {
-        const association = new RocketChatAssociationRecord(
-            RocketChatAssociationModel.MISC,
-            `${this.CODEOWNERS_ASSOCIATION_KEY}:${repoName}`
-        );
-        await persistenceWrite.removeByAssociation(association);
+        const associations: Array<RocketChatAssociationRecord> = [
+            new RocketChatAssociationRecord(RocketChatAssociationModel.MISC, this.CODEOWNERS_ASSOCIATION_KEY),
+            new RocketChatAssociationRecord(RocketChatAssociationModel.MISC, repoName)
+        ];
+        await persistenceWrite.removeByAssociations(associations);
     }
 
     // ✅ READ operations
     static async getCodeowners(repoName: string, persistenceRead: IPersistenceRead): Promise<StoredCodeowners | null> {
-        const association = new RocketChatAssociationRecord(
-            RocketChatAssociationModel.MISC,
-            `${this.CODEOWNERS_ASSOCIATION_KEY}:${repoName}`
-        );
-        const result = await persistenceRead.readByAssociation(association);
+        const associations: Array<RocketChatAssociationRecord> = [
+            new RocketChatAssociationRecord(RocketChatAssociationModel.MISC, this.CODEOWNERS_ASSOCIATION_KEY),
+            new RocketChatAssociationRecord(RocketChatAssociationModel.MISC, repoName)
+        ];
+        const result = await persistenceRead.readByAssociations(associations);
         if (result.length > 0) {
                             return result[0] as StoredCodeowners;
                         }

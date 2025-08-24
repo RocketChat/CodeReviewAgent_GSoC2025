@@ -15,28 +15,28 @@ export class UserMappingPersistence {
 
     // ✅ WRITE operations
     static async saveUserMapping(mapping: UserMapping, persistenceWrite: IPersistence): Promise<void> {
-        const association = new RocketChatAssociationRecord(
-            RocketChatAssociationModel.USER,
-            `${this.USER_MAPPING_ASSOCIATION_KEY}:${mapping.rcUserId}`
-        );
-        await persistenceWrite.updateByAssociation(association, mapping, true);
+        const associations: Array<RocketChatAssociationRecord> = [
+            new RocketChatAssociationRecord(RocketChatAssociationModel.MISC, this.USER_MAPPING_ASSOCIATION_KEY),
+            new RocketChatAssociationRecord(RocketChatAssociationModel.USER, mapping.rcUserId)
+        ];
+        await persistenceWrite.updateByAssociations(associations, mapping, true);
     }
 
     static async deleteUserMapping(rcUserId: string, persistenceWrite: IPersistence): Promise<void> {
-        const association = new RocketChatAssociationRecord(
-            RocketChatAssociationModel.USER,
-            `${this.USER_MAPPING_ASSOCIATION_KEY}:${rcUserId}`
-        );
-        await persistenceWrite.removeByAssociation(association);
+        const associations: Array<RocketChatAssociationRecord> = [
+            new RocketChatAssociationRecord(RocketChatAssociationModel.MISC, this.USER_MAPPING_ASSOCIATION_KEY),
+            new RocketChatAssociationRecord(RocketChatAssociationModel.USER, rcUserId)
+        ];
+        await persistenceWrite.removeByAssociations(associations);
     }
 
     // ✅ READ operations
     static async getUserMapping(rcUserId: string, persistenceRead: IPersistenceRead): Promise<UserMapping | null> {
-        const association = new RocketChatAssociationRecord(
-            RocketChatAssociationModel.USER,
-            `${this.USER_MAPPING_ASSOCIATION_KEY}:${rcUserId}`
-        );
-        const result = await persistenceRead.readByAssociation(association);
+        const associations: Array<RocketChatAssociationRecord> = [
+            new RocketChatAssociationRecord(RocketChatAssociationModel.MISC, this.USER_MAPPING_ASSOCIATION_KEY),
+            new RocketChatAssociationRecord(RocketChatAssociationModel.USER, rcUserId)
+        ];
+        const result = await persistenceRead.readByAssociations(associations);
         if (result.length > 0) {
                     return result[0] as UserMapping;
                 }
@@ -50,11 +50,18 @@ export class UserMappingPersistence {
 
     static async getAllUserMappings(persistenceRead: IPersistenceRead): Promise<UserMapping[]> {
         const association = new RocketChatAssociationRecord(
-            RocketChatAssociationModel.USER,
+            RocketChatAssociationModel.MISC,
             this.USER_MAPPING_ASSOCIATION_KEY
         );
         const results = await persistenceRead.readByAssociations([association]);
         return results ? results as UserMapping[] : [];
+    }
+
+
+    static async deleteAllUserMapping(persistenceWrite: IPersistence): Promise<void> {
+        const associations: Array<RocketChatAssociationRecord> = [
+            new RocketChatAssociationRecord(RocketChatAssociationModel.MISC, this.USER_MAPPING_ASSOCIATION_KEY)];
+        await persistenceWrite.removeByAssociations(associations);
     }
 }
 

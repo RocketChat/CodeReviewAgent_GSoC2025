@@ -8,7 +8,7 @@ import type { IAppInterface } from "../../interfaces/IAppInterface";
 import { getButton, getSectionBlock } from "../../helpers/blockBuilder";
 import { sendDirectMessage } from "../../helpers/message";
 
-export async function authorize(
+export async function handleAuthCommand(
   app: IAppInterface,
   read: IRead,
   modify: IModify,

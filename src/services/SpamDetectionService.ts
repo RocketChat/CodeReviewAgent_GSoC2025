@@ -19,8 +19,6 @@ export interface PRAnalysisData {
     userInfo: any;
     diffSummary: string;
     accountAge: number;
-    repoInfo: any;
-    repoName: string;
 }
 
 export class SpamDetectionService {
@@ -37,10 +35,10 @@ export class SpamDetectionService {
      */
     public async analyzePR(pr: StoredPR, repoName: string, persistence: IPersistence): Promise<SpamAnalysisResult> {
         try {
-            this.app.getLogger().info(`Starting spam analysis for PR #${pr.prNumber} in ${repoName}`);
+            this.app.getLogger().info(`Starting spam analysis for PR #${pr.number} in ${repoName}`);
 
             // Gather comprehensive PR data
-            const analysisData = await this.gatherPRAnalysisData(pr, repoName);
+            const analysisData = await this.gatherPRAnalysisData(pr);
             
                     // Perform AI-based spam analysis
         const spamResult = await this.performAISpamAnalysis(analysisData);
@@ -48,15 +46,15 @@ export class SpamDetectionService {
             // If spam detected, queue for admin review
             if (spamResult.isSpam) {
                 await this.queueForAdminReview(pr, repoName, spamResult, persistence);
-                this.app.getLogger().warn(`Spam detected in PR #${pr.prNumber}: ${spamResult.reasoning}`);
+                this.app.getLogger().warn(`Spam detected in PR #${pr.number}: ${spamResult.reasoning}`);
             } else {
-                this.app.getLogger().info(`PR #${pr.prNumber} passed spam detection`);
+                this.app.getLogger().info(`PR #${pr.number} passed spam detection`);
             }
 
             return spamResult;
 
         } catch (error) {
-            this.app.getLogger().error(`Spam detection failed for PR #${pr.prNumber}: ${error.message}`);
+            this.app.getLogger().error(`Spam detection failed for PR #${pr.number}: ${error.message}`);
             
             // Return safe fallback - treat as potential spam for manual review
             return {
@@ -72,14 +70,13 @@ export class SpamDetectionService {
     /**
      * Gather comprehensive data about the PR for analysis
      */
-    private async gatherPRAnalysisData(pr: StoredPR, repoName: string): Promise<PRAnalysisData> {
-        const [owner, repo] = repoName.split('/');
+    private async gatherPRAnalysisData(pr: StoredPR): Promise<PRAnalysisData> {
+        const [owner, repo, number] = pr.id.split('/');
 
         // Get PR files and user info in parallel
-        const [files, userInfo, repoInfo] = await Promise.all([
-            this.githubService.getPullRequestFiles(owner, repo, pr.prNumber),
-            this.githubService.getUserInfo(pr.author.username),
-            this.githubService.getRepository(owner, repo)
+        const [files, userInfo] = await Promise.all([
+            this.githubService.getPullRequestFiles(owner, repo, parseInt(number)),
+            this.githubService.getUserInfo(pr.author.username)
         ]);
 
         // Calculate account age
@@ -94,9 +91,7 @@ export class SpamDetectionService {
             files,
             userInfo,
             diffSummary,
-            accountAge,
-            repoInfo,
-            repoName
+            accountAge
         };
     }
 
@@ -125,7 +120,7 @@ Return ONLY a JSON object with this exact structure:
 
         const prompt = `Analyze this pull request for spam characteristics:
 
-**Repository:** ${data.repoName}
+**Repository:** ${data.pr.repoName}
 **PR Title:** ${data.pr.title}
 **PR Description:**
 ${data.pr.description || 'No description provided'}
@@ -141,11 +136,6 @@ ${data.files.map(f => `- ${f.filename} (+${f.additions}/-${f.deletions})`).join(
 
 **Diff Summary:**
 ${data.diffSummary}
-
-**Repository Info:**
-- Stars: ${data.repoInfo.stargazers_count || 0}
-- Forks: ${data.repoInfo.forks_count || 0}
-- Language: ${data.repoInfo.language || 'Unknown'}
 
 Provide detailed analysis focusing on red flags that indicate this might be spam.`;
 
@@ -171,7 +161,7 @@ Provide detailed analysis focusing on red flags that indicate this might be spam
                     }
 
                     // Any spam score > 0 = potential spam requiring review
-                    const isSpam = analysis.spamScore > 0;
+                    const isSpam = analysis.spamScore > 50;
                     
                     return {
                         spamScore: Math.min(100, Math.max(0, analysis.spamScore)),
@@ -200,7 +190,7 @@ Provide detailed analysis focusing on red flags that indicate this might be spam
         const spamReviewItem: SpamReviewItem = {
             prId: pr.id.toString(),
             repoName: repoName,
-            prNumber: pr.prNumber,
+            prNumber: pr.number,
             title: pr.title,
             author: pr.author.username,
             spamScore: spamResult.spamScore,
@@ -211,7 +201,7 @@ Provide detailed analysis focusing on red flags that indicate this might be spam
         };
 
         await SpamReviewPersistence.saveSpamReviewItem(spamReviewItem, persistence);
-        this.app.getLogger().info(`Queued PR #${pr.prNumber} for admin spam review`);
+        this.app.getLogger().info(`Queued PR #${pr.number} for admin spam review`);
     }
 
     /**

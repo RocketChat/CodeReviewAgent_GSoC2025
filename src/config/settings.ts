@@ -1,6 +1,7 @@
 import { ISetting, SettingType } from '@rocket.chat/apps-engine/definition/settings';
 
 export enum AppSettingsEnum {
+    ENABLE_DEV_MODE = 'enable_dev_mode',
     OWNER_NAME_ID = 'owner_name',
     REPOSITORIES_LIST_ID = 'repositories_list',
     ORG_ADMIN_PAT_TOKEN_ID = 'org_admin_pat_token',
@@ -10,6 +11,15 @@ export enum AppSettingsEnum {
 }
 
 export const settings: Array<ISetting> = [
+    {
+        id: AppSettingsEnum.ENABLE_DEV_MODE,
+        type: SettingType.BOOLEAN,
+        packageValue: false,
+        required: true,
+        public: false,
+        i18nLabel: 'Enable development mode',
+        i18nDescription: 'Toggle to switch to Development mode, allowing lower priveleged users to execute admin actions.'
+    },
     {
         id: AppSettingsEnum.OWNER_NAME_ID,
         type: SettingType.STRING,
@@ -49,23 +59,12 @@ export const settings: Array<ISetting> = [
     },
     {
         id: AppSettingsEnum.AI_MODEL_ID,
-        type: SettingType.SELECT,
-        packageValue: 'gpt-3.5-turbo',
+        type: SettingType.STRING,
+        packageValue: 'gemini-1.5-flash',
         required: true,
         public: false,
         i18nLabel: 'AI Model',
-        i18nDescription: 'AI model to use for analysis',
-        values: [
-            { key: 'gpt-4-turbo-preview', i18nLabel: 'GPT-4 Turbo' },
-            { key: 'gpt-4', i18nLabel: 'GPT-4' },
-            { key: 'gpt-3.5-turbo', i18nLabel: 'GPT-3.5 Turbo' },
-            { key: 'claude-3-opus-20240229', i18nLabel: 'Claude 3 Opus' },
-            { key: 'claude-3-sonnet-20240229', i18nLabel: 'Claude 3 Sonnet' },
-            { key: 'claude-opus-4-20250514', i18nLabel: 'Claude Opus 4' },
-            { key: 'gemini-1.5-pro', i18nLabel: 'Gemini 1.5 Pro' },
-            { key: 'gemini-1.5-flash', i18nLabel: 'Gemini 1.5 Flash' },
-            { key: 'custom', i18nLabel: 'Custom Model (specify in description)' }
-        ]
+        i18nDescription: 'AI model to use for analysis (gemini-1.5-flash, gpt-4o, etc.)'
     },
     {
         id: AppSettingsEnum.AI_PROVIDER_BASE_URL_ID,

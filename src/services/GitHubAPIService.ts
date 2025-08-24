@@ -113,7 +113,7 @@ export class GitHubAPIService {
                 return response.data as T;
             }
 
-            throw new Error(`GitHub API error: ${response.statusCode} - ${response.content}`);
+            throw new Error(`GitHub API error: ${method} ${url} ${response.statusCode} \n ${response.content}`);
             
         } catch (error) {
             const shouldRetry = attempt <= this.retryDelays.length && 

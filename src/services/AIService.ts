@@ -108,12 +108,7 @@ export class AIService {
                 top_p: config?.topP ?? 0.95
             };
 
-            // Ensure baseUrl ends with /v1 for OpenAI compatibility
-            const normalizedBaseUrl = baseUrl.endsWith('/v1') || baseUrl.endsWith('/v1/') 
-                ? baseUrl.replace(/\/$/, '') 
-                : `${baseUrl.replace(/\/$/, '')}/v1`;
-            
-            const url = `${normalizedBaseUrl}/chat/completions`;
+            const url = `${baseUrl}/chat/completions`;
             
             const response: IHttpResponse = await httpClient.post(url, {
                 headers: {
@@ -124,7 +119,7 @@ export class AIService {
             });
 
             if (response.statusCode !== 200) {
-                throw new Error(`AI API error: ${response.statusCode} - ${response.content}`);
+                throw new Error(`AI API error: ${url} ${response.statusCode} - ${response}`);
             }
 
             const aiResponse = response.data as ChatCompletionResponse;

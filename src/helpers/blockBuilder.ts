@@ -31,6 +31,11 @@ interface ButtonParams extends BaseElementParams {
 	url?: string;
 }
 
+interface ImageParams extends BaseElementParams {
+	imageUrl: string;
+	altText: string;
+}
+
 type InputElementType =
 	| "channels_select"
 	| "conversations_select"
@@ -99,6 +104,17 @@ export function getButton({
 		url,
 		value,
 		style,
+	};
+}
+
+export function getImage({
+	imageUrl,
+	altText
+}: ImageParams): ImageElement {
+	return {
+		type: "image",
+		imageUrl,
+		altText
 	};
 }
 
@@ -192,11 +208,13 @@ export function getSectionBlock(
 		| MultiStaticSelectElement
 		| OverflowElement
 		| StaticSelectElement,
+	labelTextType: 'plain_text' | 'mrkdwn'  = 'plain_text',
+
 ): SectionBlock {
 	return {
 		type: "section",
 		text: {
-			type: "plain_text",
+			type: labelTextType,
 			text: labelText,
 		},
 		accessory,

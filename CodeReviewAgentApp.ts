@@ -40,7 +40,7 @@ import {
   UserMappingPersistence,
   UserMapping,
 } from "./src/persistence/UserMappingPersistence";
-import { CodeownersPersistence } from "./src/persistence/CodeownersPersistence";
+import { StoredPR } from './src/persistence/PRPersistence';
 
 // Import commands and endpoints
 import { CodeReviewAgentCommand } from "./src/commands/CodeReviewAgentCommand";
@@ -55,6 +55,12 @@ import { settings, AppSettingsEnum } from "./src/config/settings";
 import { handleOnPreSettingUpdate } from "./src/handlers/onPreSettingUpdateHandler";
 import { handleOnSettingUpdated } from "./src/handlers/onSettingUpdatedHandler";
 import { IAppInterface } from "./src/interfaces/IAppInterface";
+import { UsernameMappingService } from "./src/services/UsernameMappingService";
+import { ExecuteViewSubmitHandler } from "./src/handlers/ExecuteViewSubmitHandler";
+import { IUIKitResponse, UIKitBlockInteractionContext, UIKitViewSubmitInteractionContext } from "@rocket.chat/apps-engine/definition/uikit";
+import { ExecuteBlockActionHandler } from "./src/handlers/ExecuteBlockActionHandler";
+
+
 
 export class CodeReviewAgentApp extends App implements IAppInterface {
   public botUser: IUser;
@@ -69,6 +75,7 @@ export class CodeReviewAgentApp extends App implements IAppInterface {
   private spamDetectionService?: SpamDetectionService;
   private reviewerMatchingService?: ReviewerMatchingService;
   private notificationService?: NotificationService;
+  private usernameMappingService?: UsernameMappingService
 
   private oauth2Config: IOAuth2ClientOptions = {
     alias: "code-review-agent-app",
@@ -134,6 +141,13 @@ export class CodeReviewAgentApp extends App implements IAppInterface {
     return this.notificationService;
   }
 
+  public getUsernameMappingService(): UsernameMappingService {
+    if (!this.usernameMappingService) {
+      this.usernameMappingService = new UsernameMappingService(this);
+    }
+    return this.usernameMappingService;
+  }
+
   private async authorizationCallback(
     token: IAuthData,
     user: IUser,
@@ -143,8 +157,6 @@ export class CodeReviewAgentApp extends App implements IAppInterface {
     persistence: IPersistence
   ) {
     try {
-      // Get GitHub user info to store username mapping
-      const githubService = this.getGitHubService();
 
       // Make a request to get user info using the OAuth token
       const response = await http.get("https://api.github.com/user", {
@@ -212,7 +224,7 @@ Error: ${error.message}`;
     modify: IModify
   ): Promise<void> {
     const user = context.user;
-    const quickReminder = isUserHighHierarchy(user)
+    const quickReminder = await isUserHighHierarchy(user, read)
       ? "Quick reminder: Let your team members know about the Code Review Agent and encourage them to authenticate with their GitHub accounts.\n"
       : "";
 
@@ -278,6 +290,16 @@ ${quickReminder}Need help? Use \`/code-review-agent help\` for available command
     return this.oauth2ClientInstance;
   }
 
+  public async executeViewSubmitHandler(context: UIKitViewSubmitInteractionContext, read: IRead, http: IHttp, persistence: IPersistence, modify: IModify): Promise<IUIKitResponse> {
+    const handler = new ExecuteViewSubmitHandler(this, read, modify, persistence);
+    return handler.run(context);
+  }
+  
+  public async executeBlockActionHandler(context: UIKitBlockInteractionContext, read: IRead, http: IHttp, persistence: IPersistence, modify: IModify): Promise<IUIKitResponse> {
+    const handler = new ExecuteBlockActionHandler(this, read, modify, persistence);
+    return await handler.run(context);
+  }
+
   public async extendConfiguration(
     configuration: IConfigurationExtend
   ): Promise<void> {
@@ -316,19 +338,20 @@ ${quickReminder}Need help? Use \`/code-review-agent help\` for available command
         },
       },
       {
-        id: "codeowners-sync",
+        id: "daily-reminder",
         startupSetting: {
           type: StartupType.RECURRING,
-          interval: "0 0 * * 0", // Weekly on Sunday
+          interval: "0 0 * * *", // Daily
         },
         processor: async (jobContext, read, modify, http, persistence) => {
-          this.getLogger().info("Starting codeowners sync job");
+          this.getLogger().info("Starting daily reminders job");
           try {
-            const codeownersService = this.getCodeownersService();
-            await codeownersService.syncAllRepositories(persistence);
-            this.getLogger().info("Codeowners sync completed successfully");
+            const persistenceRead = read.getPersistenceReader();
+            const reviewerMatchingService = this.getReviewerMatchingService();
+            await reviewerMatchingService.sendReviewReminders(read, modify, persistence, persistenceRead);
+            this.getLogger().info("Reminders sent successfully");
           } catch (error) {
-            this.getLogger().error(`Codeowners sync failed: ${error.message}`);
+            this.getLogger().error(`Reminders job failed: ${error.message}`);
           }
         },
       },
@@ -351,10 +374,10 @@ ${quickReminder}Need help? Use \`/code-review-agent help\` for available command
   ): Promise<void> {
     try {
       const prService = this.getPRService();
-      const spamService = this.getSpamDetectionService();
-      const reviewerService = this.getReviewerMatchingService();
-      const notificationService = this.getNotificationService();
+      const codeownersService = this.getCodeownersService();
       const persistenceRead = read.getPersistenceReader();
+
+      await codeownersService.syncAllRepositories(persistence);
 
       // Step 1: Fetch new PRs
       const newPRs = await prService.fetchAndStoreNewPRs(
@@ -393,15 +416,15 @@ ${quickReminder}Need help? Use \`/code-review-agent help\` for available command
    * Process a single PR through the complete pipeline
    */
   private async processSinglePR(
-    prData: any,
+    prData: StoredPR,
     read: IRead,
     modify: IModify,
     persistence: IPersistence
   ): Promise<void> {
     const prId = prData.id.toString();
-    const repoName = prData.repository || prData.repoName;
+    const repoName = prData.repoName;
 
-    this.getLogger().info(`Processing PR #${prData.prNumber} in ${repoName}`);
+    this.getLogger().info(`Processing PR #${prData.number} in ${repoName}`);
 
     try {
       const spamService = this.getSpamDetectionService();
@@ -455,7 +478,7 @@ ${quickReminder}Need help? Use \`/code-review-agent help\` for available command
         prData,
         repoName
       );
-
+      this.getLogger().debug(reviewers);
       if (reviewers.length === 0) {
         await prService.updatePRStatus(
           prId,

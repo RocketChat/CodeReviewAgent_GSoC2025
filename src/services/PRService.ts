@@ -18,9 +18,9 @@ export class PRService {
         try {
             const logger = this.app.getLogger();
             
-            const owner = await this.app.getAccessors().environmentReader
+            const owner: string = await this.app.getAccessors().environmentReader
                 .getSettings().getValueById(AppSettingsEnum.OWNER_NAME_ID);
-            const repositoriesRaw = await this.app.getAccessors().environmentReader
+            const repositoriesRaw: string = await this.app.getAccessors().environmentReader
                 .getSettings().getValueById(AppSettingsEnum.REPOSITORIES_LIST_ID);
             
             if (!owner || !repositoriesRaw) {
@@ -28,7 +28,7 @@ export class PRService {
                 return [];
             }
             
-            const repositories = repositoriesRaw.split('\n')
+            const repositories: string[] = repositoriesRaw.split('\n')
                 .map(repo => repo.trim())
                 .filter(repo => repo.length > 0);
             
@@ -44,11 +44,11 @@ export class PRService {
                     
                     for (const pr of prs) {
                         // Check if PR already exists
-                        const existingPR = await PRPersistence.getPR(`${owner}/${repo}/${pr.number}`, persistenceRead);
-                        if (existingPR) {
-                            logger.info(`Already processed PR: ${pr.number}`)
-                            continue; // Skip if already processed
-                        }
+                        // const existingPR = await PRPersistence.getPR(`${owner}/${repo}/${pr.number}`, persistenceRead);
+                        // if (existingPR) {
+                        //     logger.info(`Already processed PR: ${pr.number}`)
+                        //     continue; // Skip if already processed
+                        // }
                         
                         // Get additional PR data
                         const prFiles = await this.githubService.getPullRequestFiles(owner, repo, pr.number);
@@ -59,8 +59,9 @@ export class PRService {
                         
                         const storedPR: StoredPR = {
                             id: `${owner}/${repo}/${pr.number}`,
+                            repoOwner: owner,
                             repoName: repo,
-                            prNumber: pr.number,
+                            number: pr.number,
                             title: pr.title,
                             description: pr.body || '',
                             author: {

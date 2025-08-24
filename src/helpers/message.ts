@@ -14,6 +14,7 @@ import {
 	type NotificationParams,
 	getNotificationsStatus,
 } from "./notification";
+import { AppSettingsEnum } from "../config/settings";
 
 interface GetDirectParams {
 	read: IRead;
@@ -162,7 +163,25 @@ export async function sendDirectMessage({
 	});
 }
 
-export function isUserHighHierarchy(user: IUser): boolean {
+export async function isUserHighHierarchy(
+	user: IUser,
+	read?: IRead,
+): Promise<boolean> {
+	if (read) {
+		try {
+			const settingsReader = read.getEnvironmentReader().getSettings();
+			const devModeEnabled: boolean = await settingsReader.getValueById(
+				AppSettingsEnum.ENABLE_DEV_MODE,
+			);
+			
+			if (devModeEnabled) {
+				return true;
+			}
+		} catch (error) {
+			// Ignore and fallback to role-based check
+		}
+	}
+
 	return user.roles.some((role) =>
 		HIGH_HIERARCHY_ROLES.includes(
 			role as (typeof HIGH_HIERARCHY_ROLES)[number],

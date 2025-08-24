@@ -1,79 +1,41 @@
-import {
-  IModify,
-  IRead,
-  IPersistence,
-  IPersistenceRead,
-} from "@rocket.chat/apps-engine/definition/accessors";
-import { IUser } from "@rocket.chat/apps-engine/definition/users";
-import { IRoom } from "@rocket.chat/apps-engine/definition/rooms";
-import { IAppInterface } from "../../interfaces/IAppInterface";
-import { sendNotification } from "../../helpers/message";
-import { PendingUserMapping, PendingUserMappingPersistence } from "../../persistence/PendingUserMappingPersistence";
-import { UserMappingPersistence } from "../../persistence/UserMappingPersistence";
-import { CodeReviewAgentApp } from "../../../CodeReviewAgentApp";
+import { IModify, IPersistence, IPersistenceRead } from '@rocket.chat/apps-engine/definition/accessors';
+import { IRoom } from '@rocket.chat/apps-engine/definition/rooms';
+import { UIKitViewSubmitInteractionContext } from '@rocket.chat/apps-engine/definition/uikit';
+import { IUser } from '@rocket.chat/apps-engine/definition/users';
 
-export async function handleStatusCommand(
-  app: IAppInterface,
-  read: IRead,
-  modify: IModify,
-  user: IUser,
-  room: IRoom,
-  persistence: IPersistence
-): Promise<void> {
-  try {
-
-    const spamService = app.getSpamDetectionService();
-    const persistenceRead = read.getPersistenceReader();
-
-    const pendingSpamReviews = await spamService.getPendingSpamReviews(persistenceRead);
-    const pendingUsernameApprovals = await PendingUserMappingPersistence.getAllPendingUserMappings(persistenceRead);
-
-    const message = `📊 **Code Review Agent Status**
-
-		• 🔍 Spam reviews needed: ${pendingSpamReviews.length}\n
-    • 👍 Pending username mapping approvals: ${pendingUsernameApprovals.length}\n
-
-		*Last updated: ${new Date().toLocaleString()}*`;
-
-    await sendNotification({
-      modify: modify,
-      user: user,
-      room: room,
-      message: message,
-    });
-  } catch (error) {
-    app.getLogger().error(`Status command failed: ${error.message}`);
-    await sendNotification({
-      modify: modify,
-      user: user,
-      room: room,
-      message: `❌ **Unable to retrieve status:** ${error.message}`,
-    });
-  }
-}
+import { CodeReviewAgentApp } from '../../../CodeReviewAgentApp';
+import { ModalsEnum } from '../../enums/Modals';
+import { sendNotification } from '../../helpers/message';
+import { PendingUserMapping, PendingUserMappingPersistence } from '../../persistence/PendingUserMappingPersistence';
+import { UserMappingPersistence } from '../../persistence/UserMappingPersistence';
 
 export async function handleUsernameInput({
   app,
+  context,
   room,
   modify,
   persistence,
   persistenceRead,
-  user,
-  githubUsername
+  username
 }: {
-  app: IAppInterface;
+  app: CodeReviewAgentApp;
+  context?: UIKitViewSubmitInteractionContext;
   room: IRoom;
   modify: IModify;
   persistence: IPersistence,
   persistenceRead: IPersistenceRead,
-  user: IUser,
-  githubUsername?: string
+  username?: string
 }) {
   const logger = app.getLogger();
+  const data = context?.getInteractionData();
+  const state = data?.view.state;
+  const user: IUser = context?.getInteractionData().user!;
+  const githubUsername = username ?? state?.[ModalsEnum.GITHUB_USERNAME_BLOCK]?.[ModalsEnum.GITHUB_USERNAME_INPUT];
   
 
   if (!githubUsername) {
     const error = 'Username is missing!';
+    logger.error(error + ' | TriggerID: ' + data?.triggerId);
     const msg = modify
       .getCreator()
       .startMessage()
